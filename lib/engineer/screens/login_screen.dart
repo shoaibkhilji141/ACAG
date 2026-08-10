@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/components/construction_hero.dart';
 import '../../shared/constants/app_constants.dart';
+import '../../shared/services/auth_service.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../theme/app_theme.dart';
@@ -19,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _rememberMe = false;
   bool _isLoading = false;
+  UserRole? _selectedRole;
 
   @override
   void dispose() {
@@ -28,34 +31,56 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isLoading = true);
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    final role = AppConstants.resolveDemoRole(
-      _emailController.text,
-      _passwordController.text,
-    );
-
-    if (role != null) {
-      Navigator.of(context).pushReplacementNamed(
-        AppConstants.routeForRole(role),
+    if (_selectedRole == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please select Engineer or Home Owner role.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
       );
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Invalid email or password. Try demo credentials.'),
-        backgroundColor: AppColors.error,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final role = await AuthService.signIn(
+        email: _emailController.text,
+        password: _passwordController.text,
+        selectedRole: _selectedRole!,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed(
+        AppConstants.routeForRole(role),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -99,16 +124,42 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Sign in to continue as Engineer or Owner',
+                          'Choose your role, then sign in',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: AppColors.onSurfaceVariant,
                           ),
                         ),
-                        const SizedBox(height: 28),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _RoleCard(
+                                label: 'Engineer',
+                                icon: Icons.engineering_outlined,
+                                selected: _selectedRole == UserRole.engineer,
+                                onTap: () => setState(
+                                  () => _selectedRole = UserRole.engineer,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _RoleCard(
+                                label: 'Home Owner',
+                                icon: Icons.home_outlined,
+                                selected: _selectedRole == UserRole.owner,
+                                onTap: () => setState(
+                                  () => _selectedRole = UserRole.owner,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
                         AppTextField(
                           controller: _emailController,
                           label: 'Email',
-                          hint: 'engineer@gmail.com',
+                          hint: 'your.email@gmail.com',
                           leadingIcon: Icons.email_outlined,
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
@@ -173,15 +224,17 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 20),
                         Center(
                           child: TextButton(
-                            onPressed: () =>
-                                Navigator.of(context).pushNamed(AppRoutes.signup),
+                            onPressed: () => Navigator.of(context)
+                                .pushNamed(AppRoutes.signup),
                             child: RichText(
                               text: TextSpan(
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: AppColors.onSurfaceVariant,
                                 ),
                                 children: [
-                                  const TextSpan(text: "Don't have an account? "),
+                                  const TextSpan(
+                                    text: "Don't have an account? ",
+                                  ),
                                   TextSpan(
                                     text: 'Sign Up',
                                     style: theme.textTheme.labelLarge?.copyWith(
@@ -193,39 +246,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        const Divider(),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Demo accounts (password: ${AppConstants.demoPassword})',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: AppColors.outline,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _DemoAccountChip(
-                                label: 'Engineer',
-                                email: AppConstants.engineerEmail,
-                                onTap: () => _fillDemo(
-                                  AppConstants.engineerEmail,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _DemoAccountChip(
-                                label: 'Owner',
-                                email: AppConstants.ownerEmail,
-                                onTap: () => _fillDemo(
-                                  AppConstants.ownerEmail,
-                                ),
-                              ),
-                            ),
-                          ],
                         ),
                       ],
                     ),
@@ -239,24 +259,19 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-
-  void _fillDemo(String email) {
-    setState(() {
-      _emailController.text = email;
-      _passwordController.text = AppConstants.demoPassword;
-    });
-  }
 }
 
-class _DemoAccountChip extends StatelessWidget {
-  const _DemoAccountChip({
+class _RoleCard extends StatelessWidget {
+  const _RoleCard({
     required this.label,
-    required this.email,
+    required this.icon,
+    required this.selected,
     required this.onTap,
   });
 
   final String label;
-  final String email;
+  final IconData icon;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
@@ -264,31 +279,37 @@ class _DemoAccountChip extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Material(
-      color: AppColors.primary.withValues(alpha: 0.06),
-      borderRadius: BorderRadius.circular(10),
+      color: selected
+          ? AppColors.primary.withValues(alpha: 0.12)
+          : AppColors.surfaceContainer.withValues(alpha: 0.55),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected
+                  ? AppColors.primary
+                  : AppColors.outlineVariant.withValues(alpha: 0.45),
+              width: selected ? 1.5 : 1,
+            ),
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Icon(
+                icon,
+                color: selected ? AppColors.primary : AppColors.outline,
+              ),
+              const SizedBox(height: 8),
               Text(
                 label,
                 style: theme.textTheme.labelLarge?.copyWith(
-                  color: AppColors.primary,
+                  color: selected ? AppColors.primary : AppColors.onSurface,
                   fontWeight: FontWeight.w700,
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                email,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

@@ -3,9 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('AppConstants.resolveDemoRole', () {
-    test('routes engineer@gmail.com to engineer', () {
+    test('routes engineer email to engineer', () {
       expect(
-        AppConstants.resolveDemoRole('engineer@gmail.com', '12345678'),
+        AppConstants.resolveDemoRole(
+          'shoaibkhilji141@gmail.com',
+          '12345678',
+        ),
         UserRole.engineer,
       );
       expect(
@@ -14,9 +17,12 @@ void main() {
       );
     });
 
-    test('routes owner@gmail.com to owner', () {
+    test('routes owner email to owner', () {
       expect(
-        AppConstants.resolveDemoRole('owner@gmail.com', '12345678'),
+        AppConstants.resolveDemoRole(
+          'ali.raza.owner@gmail.com',
+          '12345678',
+        ),
         UserRole.owner,
       );
       expect(
@@ -27,14 +33,20 @@ void main() {
 
     test('is case-insensitive for email', () {
       expect(
-        AppConstants.resolveDemoRole('Engineer@Gmail.com', '12345678'),
+        AppConstants.resolveDemoRole(
+          'ShoaibKhilji141@Gmail.com',
+          '12345678',
+        ),
         UserRole.engineer,
       );
     });
 
     test('rejects wrong password', () {
       expect(
-        AppConstants.resolveDemoRole('engineer@gmail.com', 'wrong'),
+        AppConstants.resolveDemoRole(
+          'shoaibkhilji141@gmail.com',
+          'wrong',
+        ),
         isNull,
       );
     });

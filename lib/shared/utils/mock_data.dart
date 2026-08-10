@@ -1,79 +1,33 @@
 import '../models/models.dart';
 
 class MockData {
-  static const engineerName = 'Engr. Muhammad Usman';
+  static const engineerName = 'Shoaib Khilji';
   static const engineerLocation = 'Lahore, Punjab';
   static const ownerName = 'Ali Raza';
-  static const ownerLocation = 'Lahore, Punjab';
+  static const ownerLocation = 'Raiwind Road, Lahore';
 
   static const kpis = (
-    assigned: 12,
-    todayInspections: 5,
-    pending: 7,
-    completed: 18,
-    completionPercent: 68,
+    assigned: 1,
+    todayInspections: 1,
+    pending: 0,
+    completed: 0,
+    completionPercent: 15,
   );
 
   static final projects = <ProjectModel>[
     ProjectModel(
-      id: 'ACAG-2451',
-      title: 'House #ACAG-2451',
-      address: 'Raiwind Road, Block C',
+      id: 'ACAG-1',
+      title: 'House #ACAG-1',
+      address: 'Johar Town, Block A',
       city: 'Lahore',
       ownerName: 'Ali Raza',
-      engineerName: 'Muhammad Usman',
-      progress: 0.45,
+      engineerName: 'Shoaib Khilji',
+      progress: 0.15,
       status: ProjectStatus.inProgress,
-      phase: 'Brick Work',
-      nextInspection: '20 May 2025',
-    ),
-    ProjectModel(
-      id: 'ACAG-2487',
-      title: 'House #ACAG-2487',
-      address: 'Johar Town, Phase 2',
-      city: 'Lahore',
-      ownerName: 'Sara Khan',
-      engineerName: 'Muhammad Usman',
-      progress: 0.72,
-      status: ProjectStatus.inProgress,
-      phase: 'Roof Casting',
-      nextInspection: '22 May 2025',
-    ),
-    ProjectModel(
-      id: 'ACAG-2390',
-      title: 'House #ACAG-2390',
-      address: 'Model Town Extension',
-      city: 'Lahore',
-      ownerName: 'Bilal Ahmed',
-      engineerName: 'Muhammad Usman',
-      progress: 0.20,
-      status: ProjectStatus.pending,
       phase: 'Foundation',
-      nextInspection: '21 May 2025',
-    ),
-    ProjectModel(
-      id: 'ACAG-2312',
-      title: 'House #ACAG-2312',
-      address: 'Allama Iqbal Town',
-      city: 'Lahore',
-      ownerName: 'Fatima Noor',
-      engineerName: 'Muhammad Usman',
-      progress: 0.90,
-      status: ProjectStatus.completed,
-      phase: 'Finishing',
-      nextInspection: 'Completed',
-    ),
-    ProjectModel(
-      id: 'ACAG-2288',
-      title: 'House #ACAG-2288',
-      address: 'Wahdat Road',
-      city: 'Lahore',
-      ownerName: 'Hassan Ali',
-      engineerName: 'Muhammad Usman',
-      progress: 0.35,
-      status: ProjectStatus.overdue,
-      phase: 'Plinth Beam',
-      nextInspection: 'Overdue',
+      nextInspection: 'Next week',
+      lat: 31.4697,
+      lng: 74.2728,
     ),
   ];
 
@@ -81,22 +35,16 @@ class MockData {
 
   static const notifications = <NotificationModel>[
     NotificationModel(
-      title: 'Inspection pending at House #ACAG-2451',
-      subtitle: 'Raiwind Road, Lahore',
+      title: 'Inspection pending at House #ACAG-1',
+      subtitle: 'Johar Town, Lahore',
       timeAgo: '30m ago',
       type: NotificationType.warning,
     ),
     NotificationModel(
       title: 'New project assigned to you',
-      subtitle: 'House #ACAG-2487 added to queue',
+      subtitle: 'House #ACAG-1 added to queue',
       timeAgo: '1h ago',
       type: NotificationType.info,
-    ),
-    NotificationModel(
-      title: 'AI validation passed',
-      subtitle: 'House #ACAG-2312 finishing stage approved',
-      timeAgo: 'Yesterday',
-      type: NotificationType.success,
     ),
   ];
 

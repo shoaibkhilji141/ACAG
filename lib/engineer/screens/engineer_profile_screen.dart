@@ -1,13 +1,82 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../shared/constants/app_constants.dart';
+import '../../shared/services/auth_service.dart';
 import '../../shared/utils/mock_data.dart';
 import '../../shared/widgets/acag_app_bar.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../theme/app_theme.dart';
 
-class EngineerProfileScreen extends StatelessWidget {
+class EngineerProfileScreen extends StatefulWidget {
   const EngineerProfileScreen({super.key});
+
+  @override
+  State<EngineerProfileScreen> createState() => _EngineerProfileScreenState();
+}
+
+class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
+  final _picker = ImagePicker();
+  String? _name;
+  String? _location;
+  String? _imageUrl;
+  File? _localImage;
+  bool _uploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final profile = await AuthService.currentProfile();
+    if (!mounted) return;
+    setState(() {
+      _name = profile?['full_name'] as String? ?? MockData.engineerName;
+      _location =
+          profile?['location_text'] as String? ?? MockData.engineerLocation;
+      _imageUrl = profile?['profile_image_url'] as String?;
+    });
+  }
+
+  Future<void> _pickImage() async {
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+
+    final file = File(picked.path);
+    setState(() {
+      _localImage = file;
+      _uploading = true;
+    });
+
+    try {
+      final url = await AuthService.uploadAvatar(file);
+      if (!mounted) return;
+      setState(() {
+        _imageUrl = url ?? _imageUrl;
+        _uploading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo updated')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _uploading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Could not upload photo. Showing local preview.'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+    }
+  }
 
   void _logout(BuildContext context) {
     showDialog<void>(
@@ -22,8 +91,10 @@ class EngineerProfileScreen extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(context).pop();
+              await AuthService.signOut();
+              if (!context.mounted) return;
               Navigator.of(context).pushNamedAndRemoveUntil(
                 AppRoutes.login,
                 (route) => false,
@@ -42,10 +113,19 @@ class EngineerProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final displayName = _name ?? MockData.engineerName;
+    final displayLocation = _location ?? MockData.engineerLocation;
+    final initials = displayName
+        .split(' ')
+        .where((p) => p.isNotEmpty)
+        .take(2)
+        .map((p) => p[0].toUpperCase())
+        .join();
+
     const stats = [
-      (label: 'Assigned', value: '12'),
-      (label: 'Completed', value: '18'),
-      (label: 'Rating', value: '4.8'),
+      (label: 'Assigned', value: '1'),
+      (label: 'Completed', value: '0'),
+      (label: 'Rating', value: '—'),
     ];
 
     return Scaffold(
@@ -63,20 +143,66 @@ class EngineerProfileScreen extends StatelessWidget {
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: 44,
-                    backgroundColor: AppColors.primaryContainer,
-                    child: Text(
-                      'MU',
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        color: AppColors.onPrimary,
-                        fontWeight: FontWeight.w700,
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 44,
+                        backgroundColor: AppColors.primaryContainer,
+                        backgroundImage: _localImage != null
+                            ? FileImage(_localImage!)
+                            : (_imageUrl != null
+                                ? NetworkImage(_imageUrl!)
+                                : null) as ImageProvider?,
+                        child: (_localImage == null && _imageUrl == null)
+                            ? Text(
+                                initials.isEmpty ? 'SK' : initials,
+                                style: theme.textTheme.headlineMedium?.copyWith(
+                                  color: AppColors.onPrimary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              )
+                            : null,
                       ),
-                    ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Material(
+                          color: AppColors.primary,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: _uploading ? null : _pickImage,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: _uploading
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.onPrimary,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.photo_camera_outlined,
+                                      size: 16,
+                                      color: AppColors.onPrimary,
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _uploading ? null : _pickImage,
+                    icon: const Icon(Icons.photo_library_outlined, size: 18),
+                    label: const Text('Change from Gallery'),
+                  ),
+                  const SizedBox(height: 8),
                   Text(
-                    MockData.engineerName,
+                    displayName,
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -110,7 +236,7 @@ class EngineerProfileScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        MockData.engineerLocation,
+                        displayLocation,
                         style: theme.textTheme.bodySmall,
                       ),
                     ],
@@ -165,7 +291,7 @@ class EngineerProfileScreen extends StatelessWidget {
                   _SettingsTile(
                     icon: Icons.person_outline,
                     title: 'Edit Profile',
-                    onTap: () {},
+                    onTap: _pickImage,
                   ),
                   _divider(),
                   _SettingsTile(

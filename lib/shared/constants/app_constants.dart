@@ -4,12 +4,12 @@ class AppConstants {
   static const orgLine = 'Government of Punjab';
   static const urbanUnit = 'The Urban Unit';
 
-  /// Hardcoded demo credentials (frontend mock only).
-  static const engineerEmail = 'engineer@gmail.com';
-  static const ownerEmail = 'owner@gmail.com';
+  /// Seeded demo accounts in Supabase (for reference / tests).
+  static const engineerEmail = 'shoaibkhilji141@gmail.com';
+  static const ownerEmail = 'ali.raza.owner@gmail.com';
   static const demoPassword = '12345678';
 
-  /// Resolves demo login to a role. Returns null when credentials are invalid.
+  /// Local fallback resolver for unit tests / offline demo only.
   static UserRole? resolveDemoRole(String email, String password) {
     final normalized = email.trim().toLowerCase();
     if (password != demoPassword) return null;

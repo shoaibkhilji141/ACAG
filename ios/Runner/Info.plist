@@ -4,6 +4,12 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>ACAG needs camera access for site photos and profile pictures.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ACAG needs photo library access so you can set a profile picture and upload site evidence.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>ACAG may save captured site photos to your library.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

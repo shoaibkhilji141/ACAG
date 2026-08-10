@@ -1,18 +1,86 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../shared/constants/app_constants.dart';
+import '../../shared/services/auth_service.dart';
 import '../../shared/utils/mock_data.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/section_header.dart';
 import '../../theme/app_theme.dart';
 
-class OwnerProfileScreen extends StatelessWidget {
+class OwnerProfileScreen extends StatefulWidget {
   const OwnerProfileScreen({super.key});
+
+  @override
+  State<OwnerProfileScreen> createState() => _OwnerProfileScreenState();
+}
+
+class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
+  final _picker = ImagePicker();
+  String? _name;
+  String? _location;
+  String? _imageUrl;
+  File? _localImage;
+  bool _uploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final profile = await AuthService.currentProfile();
+    if (!mounted) return;
+    setState(() {
+      _name = profile?['full_name'] as String? ?? MockData.ownerName;
+      _location =
+          profile?['location_text'] as String? ?? MockData.ownerLocation;
+      _imageUrl = profile?['profile_image_url'] as String?;
+    });
+  }
+
+  Future<void> _pickImage() async {
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+
+    final file = File(picked.path);
+    setState(() {
+      _localImage = file;
+      _uploading = true;
+    });
+
+    try {
+      final url = await AuthService.uploadAvatar(file);
+      if (!mounted) return;
+      setState(() {
+        _imageUrl = url ?? _imageUrl;
+        _uploading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _uploading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final project = MockData.primaryProject;
+    final displayName = _name ?? MockData.ownerName;
+    final displayLocation = _location ?? MockData.ownerLocation;
+    final initials = displayName
+        .split(' ')
+        .where((p) => p.isNotEmpty)
+        .take(2)
+        .map((p) => p[0].toUpperCase())
+        .join();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -33,27 +101,62 @@ class OwnerProfileScreen extends StatelessWidget {
             FluentCard(
               child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: AppColors.primaryContainer,
-                    child: Text(
-                      'AR',
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        color: AppColors.onPrimary,
-                        fontWeight: FontWeight.w700,
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundColor: AppColors.primaryContainer,
+                        backgroundImage: _localImage != null
+                            ? FileImage(_localImage!)
+                            : (_imageUrl != null
+                                ? NetworkImage(_imageUrl!)
+                                : null) as ImageProvider?,
+                        child: (_localImage == null && _imageUrl == null)
+                            ? Text(
+                                initials.isEmpty ? 'AR' : initials,
+                                style: theme.textTheme.headlineMedium?.copyWith(
+                                  color: AppColors.onPrimary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              )
+                            : null,
                       ),
-                    ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Material(
+                          color: AppColors.primary,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: _uploading ? null : _pickImage,
+                            child: const Padding(
+                              padding: EdgeInsets.all(7),
+                              child: Icon(
+                                Icons.photo_camera_outlined,
+                                size: 14,
+                                color: AppColors.onPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: _uploading ? null : _pickImage,
+                    icon: const Icon(Icons.photo_library_outlined, size: 18),
+                    label: const Text('Change from Gallery'),
+                  ),
                   Text(
-                    MockData.ownerName,
+                    displayName,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    MockData.ownerLocation,
+                    displayLocation,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: AppColors.onSurfaceVariant,
                     ),
@@ -69,7 +172,7 @@ class OwnerProfileScreen extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.home_outlined,
                           size: 16,
                           color: AppColors.primary,
@@ -89,7 +192,7 @@ class OwnerProfileScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            Align(
+            const Align(
               alignment: Alignment.centerLeft,
               child: SectionHeader(title: 'Project Details'),
             ),
@@ -124,7 +227,7 @@ class OwnerProfileScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            Align(
+            const Align(
               alignment: Alignment.centerLeft,
               child: SectionHeader(title: 'Contact'),
             ),
@@ -143,18 +246,14 @@ class OwnerProfileScreen extends StatelessWidget {
                     label: 'Phone',
                     value: '+92 300 1234567',
                   ),
-                  const Divider(height: 24),
-                  _ProfileField(
-                    icon: Icons.badge_outlined,
-                    label: 'CNIC',
-                    value: '35201-1234567-1',
-                  ),
                 ],
               ),
             ),
             const SizedBox(height: 32),
             OutlinedButton.icon(
-              onPressed: () {
+              onPressed: () async {
+                await AuthService.signOut();
+                if (!context.mounted) return;
                 Navigator.pushNamedAndRemoveUntil(
                   context,
                   AppRoutes.login,
