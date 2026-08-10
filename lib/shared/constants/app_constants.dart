@@ -38,6 +38,28 @@ class AppRoutes {
   static const engineerAi = '/engineer/ai-validation';
   static const engineerReport = '/engineer/report';
   static const engineerProfile = '/engineer/profile';
+  static const projectModule01 = '/project/module-01';
+  static const projectModule02 = '/project/module-02';
+  static const projectModule03 = '/project/module-03';
+  static const projectModule04 = '/project/module-04';
+  static const projectModule05 = '/project/module-05';
+
+  static const stitchPlotDimensions = '/stitch/01-plot-dimensions';
+  static const stitchRoomRequirements = '/stitch/02-room-requirements';
+  static const stitchGeneratedFloorPlans = '/stitch/03-generated-floor-plans';
+  static const stitchElevationDesign = '/stitch/04-elevation-design';
+  static const stitchNumberOfStories = '/stitch/05-number-of-stories';
+  static const stitchSoilAnalysisDetails = '/stitch/06-soil-analysis-details';
+  static const stitchGeneratedFoundationDrawing =
+      '/stitch/07-generated-foundation-drawing';
+  static const stitchStructuralFrameType = '/stitch/08-structural-frame-type';
+  static const stitchMaterialEstimation = '/stitch/09-material-estimation';
+  static const stitchStageTimeline = '/stitch/10-stage-timeline';
+  static const stitchPhotoUpload = '/stitch/11-photo-upload';
+  static const stitchQualityAssessment = '/stitch/12-quality-assessment';
+  static const stitchProjectHandover = '/stitch/13-project-handover';
+  static const stitchHseCompliance = '/stitch/14-hse-compliance';
+  static const stitchCompletionCertificate = '/stitch/15-completion-certificate';
 
   static const ownerShell = '/owner';
   static const ownerProject = '/owner/project';
