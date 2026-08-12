@@ -1,6 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../shared/constants/app_constants.dart';
+import '../../shared/services/project_service.dart';
+import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/mock_data.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -17,7 +22,9 @@ class UploadProgressScreen extends StatefulWidget {
 class _UploadProgressScreenState extends State<UploadProgressScreen> {
   int _selectedStage = 3;
   final _notesController = TextEditingController();
-  bool _photoAttached = false;
+  File? _photoFile;
+  bool _uploading = false;
+  final _picker = ImagePicker();
 
   @override
   void dispose() {
@@ -26,16 +33,65 @@ class _UploadProgressScreenState extends State<UploadProgressScreen> {
   }
 
   Future<void> _attachPhoto() async {
-    final project = projectFromRoute(context);
-    await Navigator.of(context).pushNamed(
-      AppRoutes.engineerCamera,
-      arguments: project,
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take Photo'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
     );
-    if (mounted) setState(() => _photoAttached = true);
+    if (source == null) return;
+
+    final picked = await _picker.pickImage(
+      source: source,
+      maxWidth: 1600,
+      imageQuality: 80,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _photoFile = File(picked.path));
   }
 
   Future<void> _submit() async {
     final project = projectFromRoute(context);
+    setState(() => _uploading = true);
+
+    try {
+      if (_photoFile != null) {
+        final base64 = await encodeFileToBase64(_photoFile!);
+        await ProjectService.addProjectImageBase64(
+          projectCodeOrId: project.id,
+          imageBase64: base64,
+          caption:
+              'Progress — ${MockData.stages[_selectedStage.clamp(0, MockData.stages.length - 1)].title}',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _uploading = false);
 
     await showDialog<void>(
       context: context,
@@ -144,7 +200,8 @@ class _UploadProgressScreenState extends State<UploadProgressScreen> {
               controller: _notesController,
               maxLines: 4,
               decoration: InputDecoration(
-                hintText: 'Describe progress, materials used, observations...',
+                hintText:
+                    'Describe progress, materials used, observations...',
                 filled: true,
                 fillColor: AppColors.surfaceLowest,
                 border: OutlineInputBorder(
@@ -165,12 +222,18 @@ class _UploadProgressScreenState extends State<UploadProgressScreen> {
                       color: AppColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(
-                      _photoAttached
-                          ? Icons.check_circle_outline
-                          : Icons.add_a_photo_outlined,
-                      color: AppColors.primary,
-                    ),
+                    child: _photoFile != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.file(
+                              _photoFile!,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.add_a_photo_outlined,
+                            color: AppColors.primary,
+                          ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -178,14 +241,16 @@ class _UploadProgressScreenState extends State<UploadProgressScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _photoAttached ? 'Photo Attached' : 'Attach Photo',
+                          _photoFile != null
+                              ? 'Photo Attached'
+                              : 'Attach Photo',
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                             fontSize: 15,
                           ),
                         ),
                         Text(
-                          _photoAttached
+                          _photoFile != null
                               ? 'Site photo captured successfully'
                               : 'Take or select a site photo',
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -195,15 +260,23 @@ class _UploadProgressScreenState extends State<UploadProgressScreen> {
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_right, color: AppColors.outline),
+                  Icon(
+                    _photoFile != null
+                        ? Icons.check_circle_outline
+                        : Icons.chevron_right,
+                    color: _photoFile != null
+                        ? AppColors.primary
+                        : AppColors.outline,
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 28),
             PrimaryButton(
-              label: 'Submit Progress',
+              label: _uploading ? 'Uploading…' : 'Submit Progress',
               icon: Icons.cloud_upload_outlined,
-              onPressed: _submit,
+              isLoading: _uploading,
+              onPressed: _uploading ? null : _submit,
             ),
           ],
         ),

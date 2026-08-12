@@ -1,6 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../shared/constants/app_constants.dart';
+import '../../shared/services/project_service.dart';
+import '../../shared/utils/image_base64.dart';
 import '../../theme/app_theme.dart';
 import 'project_details_screen.dart';
 
@@ -14,7 +19,9 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen>
     with SingleTickerProviderStateMixin {
   bool _capturing = false;
+  File? _capturedFile;
   late AnimationController _flashController;
+  final _picker = ImagePicker();
 
   @override
   void initState() {
@@ -33,16 +40,69 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _capture() async {
     if (_capturing) return;
-    setState(() => _capturing = true);
+
+    final project = projectFromRoute(context);
+
+    final picked = await _picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 1600,
+      imageQuality: 80,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      _capturing = true;
+      _capturedFile = File(picked.path);
+    });
 
     await _flashController.forward();
     await _flashController.reverse();
-    await Future<void>.delayed(const Duration(milliseconds: 400));
+
+    try {
+      final base64 = await encodeFileToBase64(File(picked.path));
+      await ProjectService.addProjectImageBase64(
+        projectCodeOrId: project.id,
+        imageBase64: base64,
+        caption: 'Inspection photo',
+      );
+    } catch (_) {}
 
     if (!mounted) return;
     setState(() => _capturing = false);
 
+    Navigator.of(context).pushReplacementNamed(
+      AppRoutes.engineerAi,
+      arguments: project,
+    );
+  }
+
+  Future<void> _pickGallery() async {
     final project = projectFromRoute(context);
+
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      imageQuality: 80,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      _capturing = true;
+      _capturedFile = File(picked.path);
+    });
+
+    try {
+      final base64 = await encodeFileToBase64(File(picked.path));
+      await ProjectService.addProjectImageBase64(
+        projectCodeOrId: project.id,
+        imageBase64: base64,
+        caption: 'Inspection photo',
+      );
+    } catch (_) {}
+
+    if (!mounted) return;
+    setState(() => _capturing = false);
+
     Navigator.of(context).pushReplacementNamed(
       AppRoutes.engineerAi,
       arguments: project,
@@ -69,23 +129,27 @@ class _CameraScreenState extends State<CameraScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.grey.shade900,
-                  Colors.black,
-                  Colors.grey.shade800,
-                ],
+          if (_capturedFile != null)
+            Image.file(_capturedFile!, fit: BoxFit.cover)
+          else
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.grey.shade900,
+                    Colors.black,
+                    Colors.grey.shade800,
+                  ],
+                ),
               ),
             ),
-          ),
-          CustomPaint(
-            painter: _ViewfinderPainter(),
-            size: Size.infinite,
-          ),
+          if (_capturedFile == null)
+            CustomPaint(
+              painter: _ViewfinderPainter(),
+              size: Size.infinite,
+            ),
           AnimatedBuilder(
             animation: _flashController,
             builder: (context, child) {
@@ -102,59 +166,58 @@ class _CameraScreenState extends State<CameraScreen>
             child: Column(
               children: [
                 const Spacer(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    'Align the construction site within the frame',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.white70,
+                if (_capturing)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 24),
+                    child: CircularProgressIndicator(color: Colors.white),
+                  )
+                else ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      'Align the construction site within the frame',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white70,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 32),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _CircleButton(
-                      icon: Icons.photo_library_outlined,
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Gallery picker (mock)'),
-                            behavior: SnackBarBehavior.floating,
+                  const SizedBox(height: 32),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _CircleButton(
+                        icon: Icons.photo_library_outlined,
+                        onTap: _pickGallery,
+                      ),
+                      GestureDetector(
+                        onTap: _capture,
+                        child: Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border:
+                                Border.all(color: Colors.white, width: 4),
                           ),
-                        );
-                      },
-                    ),
-                    GestureDetector(
-                      onTap: _capture,
-                      child: Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 4),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _capturing
-                                  ? AppColors.primaryContainer
-                                  : Colors.white,
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    _CircleButton(
-                      icon: Icons.flip_camera_ios_outlined,
-                      onTap: () {},
-                    ),
-                  ],
-                ),
+                      _CircleButton(
+                        icon: Icons.flip_camera_ios_outlined,
+                        onTap: () {},
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 40),
               ],
             ),

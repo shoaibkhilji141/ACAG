@@ -8,7 +8,6 @@ import '../constants/app_constants.dart';
 class AcagAppBar extends StatelessWidget implements PreferredSizeWidget {
   const AcagAppBar({
     super.key,
-    this.onMenuTap,
     this.onNotificationTap,
     this.notificationCount = 0,
     this.showAvatar = false,
@@ -18,7 +17,6 @@ class AcagAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.showBranding = true,
   });
 
-  final VoidCallback? onMenuTap;
   final VoidCallback? onNotificationTap;
   final int notificationCount;
   final bool showAvatar;
@@ -46,12 +44,7 @@ class AcagAppBar extends StatelessWidget implements PreferredSizeWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
           children: [
-            IconButton(
-              onPressed: onMenuTap,
-              icon: const Icon(Icons.menu_rounded),
-              color: AppColors.onSurface,
-              tooltip: 'Menu',
-            ),
+            const SizedBox(width: 8),
             if (showBranding) ...[
               Container(
                 width: 36,
