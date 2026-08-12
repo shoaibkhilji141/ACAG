@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../shared/constants/app_constants.dart';
 import '../../shared/models/models.dart';
+import '../../shared/services/share_download_service.dart';
 import '../../shared/utils/mock_data.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../theme/app_theme.dart';
+
 class InspectionReportScreen extends StatelessWidget {
   const InspectionReportScreen({super.key});
 
@@ -18,6 +20,22 @@ class InspectionReportScreen extends StatelessWidget {
       return (project: args, report: MockData.reports.first);
     }
     return (project: MockData.primaryProject, report: MockData.reports.first);
+  }
+
+  String _reportText(ProjectModel project, ReportItem report) {
+    return '''
+ACAG Inspection Report
+----------------------
+Report: ${report.title}
+Code: ${report.id}
+Date: ${report.date}
+Result: ${report.result}
+Score: ${report.score}
+Project: ${project.id} — ${project.title}
+Owner: ${project.ownerName}
+Address: ${project.address}, ${project.city}
+Engineer: ${project.engineerName}
+'''.trim();
   }
 
   @override
@@ -36,22 +54,18 @@ class InspectionReportScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.share_outlined),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Share report (mock)'),
-                  behavior: SnackBarBehavior.floating,
-                ),
+              ShareDownloadService.sharePlainText(
+                title: report.title,
+                body: _reportText(project, report),
               );
             },
           ),
           IconButton(
             icon: const Icon(Icons.download_outlined),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Downloading PDF report (mock)'),
-                  behavior: SnackBarBehavior.floating,
-                ),
+              ShareDownloadService.downloadTextFile(
+                fileName: '${report.id}_report.txt',
+                content: _reportText(project, report),
               );
             },
           ),

@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/project_service.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
 import '../../theme/app_theme.dart';
 
-class GeneratedFoundationDrawingScreen extends StatelessWidget {
+class GeneratedFoundationDrawingScreen extends StatefulWidget {
   const GeneratedFoundationDrawingScreen({super.key});
+
+  @override
+  State<GeneratedFoundationDrawingScreen> createState() =>
+      _GeneratedFoundationDrawingScreenState();
+}
+
+class _GeneratedFoundationDrawingScreenState
+    extends State<GeneratedFoundationDrawingScreen> {
+  bool _saving = false;
 
   static const _specs = [
     ('Foundation Type', 'Strip Footing + Plinth Beam'),
@@ -18,18 +28,41 @@ class GeneratedFoundationDrawingScreen extends StatelessWidget {
     ('DPC Layer', 'Bitumen + polythene sheet'),
   ];
 
+  Future<void> _continue() async {
+    final screen = stitchScreens[6];
+    final project = projectFromRoute(context);
+    setState(() => _saving = true);
+    try {
+      await ProjectService.saveFoundationDrawing(
+        projectCodeOrId: project.id,
+        summaryJson: {for (final s in _specs) s.$1: s.$2},
+      );
+      if (!mounted) return;
+      await navigateStitchNext(context, screen);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final screen = stitchScreens[6];
     final theme = Theme.of(context);
-    projectFromRoute(context);
 
     return StitchFlowScaffold(
       screen: screen,
       moduleDescription:
           'Auto-generated foundation drawing based on soil analysis and story count.',
-      bottomLabel: 'Continue to Frame Type',
-      onBottomPressed: () => navigateStitchNext(context, screen),
+      bottomLabel: _saving ? 'Saving…' : 'Continue to Frame Type',
+      onBottomPressed: _saving ? null : _continue,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

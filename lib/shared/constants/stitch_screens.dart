@@ -157,6 +157,7 @@ const stitchScreens = <StitchScreenDef>[
     moduleTitle: 'Handover & HSE',
     stepInModule: 2,
     totalStepsInModule: 3,
+    nextRoute: AppRoutes.stitchCompletionCertificate,
   ),
   StitchScreenDef(
     number: 15,

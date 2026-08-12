@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/project_service.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
@@ -16,15 +17,19 @@ class GeneratedFloorPlansScreen extends StatefulWidget {
 
 class _GeneratedFloorPlansScreenState extends State<GeneratedFloorPlansScreen> {
   int _selectedPlan = 0;
+  bool _loading = true;
+  bool _saving = false;
 
   static const _plans = [
     (
+      key: 'plan_a_compact',
       name: 'Plan A — Compact Layout',
       area: '1,850 sq.ft',
       rooms: ['Bed 1', 'Bed 2', 'Bed 3', 'Bath', 'Kitchen', 'Living'],
       badge: 'Recommended',
     ),
     (
+      key: 'plan_b_open',
       name: 'Plan B — Open Living',
       area: '1,920 sq.ft',
       rooms: ['Master', 'Bed 2', 'Bed 3', 'Bath ×2', 'Kitchen', 'Lounge'],
@@ -33,141 +38,204 @@ class _GeneratedFloorPlansScreenState extends State<GeneratedFloorPlansScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final project = projectFromRoute(context);
+    try {
+      final rows = await ProjectService.getFloorPlans(project.id);
+      if (!mounted) return;
+      final selected = rows.cast<Map<String, dynamic>?>().firstWhere(
+            (r) => r?['is_selected'] == true,
+            orElse: () => null,
+          );
+      if (selected != null) {
+        final key = selected['option_key'] as String?;
+        final idx = _plans.indexWhere((p) => p.key == key);
+        if (idx >= 0) _selectedPlan = idx;
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _continue() async {
+    final screen = stitchScreens[2];
+    final project = projectFromRoute(context);
+    setState(() => _saving = true);
+    try {
+      await ProjectService.saveFloorPlanSelection(
+        projectCodeOrId: project.id,
+        selectedOptionKey: _plans[_selectedPlan].key,
+        options: _plans
+            .map(
+              (p) => {
+                'option_key': p.key,
+                'title': p.name,
+                'description': '${p.area} | ${p.rooms.join(", ")}',
+              },
+            )
+            .toList(),
+      );
+      if (!mounted) return;
+      await navigateStitchNext(context, screen);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final screen = stitchScreens[2];
     final theme = Theme.of(context);
-    projectFromRoute(context);
 
     return StitchFlowScaffold(
       screen: screen,
       moduleDescription:
           'AI-generated floor plans based on your plot size and room requirements.',
-      bottomLabel: 'Continue to Elevation Design',
-      onBottomPressed: () => navigateStitchNext(context, screen),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Generated Floor Plans',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Select a floor plan to proceed with elevation design.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ...List.generate(_plans.length, (i) {
-            final plan = _plans[i];
-            final selected = _selectedPlan == i;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: GestureDetector(
-                onTap: () => setState(() => _selectedPlan = i),
-                child: FluentCard(
-                  border: Border.all(
-                    color: selected
-                        ? AppColors.primary
-                        : AppColors.outlineVariant.withValues(alpha: 0.5),
-                    width: selected ? 2 : 1,
-                  ),
-                  color: selected
-                      ? AppColors.primaryFixed.withValues(alpha: 0.12)
-                      : null,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              plan.name,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              plan.badge,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          if (selected) ...[
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.check_circle,
-                              color: AppColors.primary,
-                              size: 22,
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _FloorPlanPreview(rooms: plan.rooms),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.square_foot_outlined,
-                            size: 16,
-                            color: AppColors.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            plan.area,
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                          const Spacer(),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            children: plan.rooms.map((r) {
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceContainer,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  r,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      ),
-                    ],
+      bottomLabel: _saving ? 'Saving…' : 'Continue to Elevation Design',
+      onBottomPressed: (_loading || _saving) ? null : _continue,
+      body: _loading
+          ? const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Generated Floor Plans',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
-            );
-          }),
-        ],
-      ),
+                const SizedBox(height: 4),
+                Text(
+                  'Select a floor plan to proceed with elevation design.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...List.generate(_plans.length, (i) {
+                  final plan = _plans[i];
+                  final selected = _selectedPlan == i;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selectedPlan = i),
+                      child: FluentCard(
+                        border: Border.all(
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.outlineVariant.withValues(alpha: 0.5),
+                          width: selected ? 2 : 1,
+                        ),
+                        color: selected
+                            ? AppColors.primaryFixed.withValues(alpha: 0.12)
+                            : null,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    plan.name,
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    plan.badge,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                if (selected) ...[
+                                  const SizedBox(width: 8),
+                                  const Icon(
+                                    Icons.check_circle,
+                                    color: AppColors.primary,
+                                    size: 22,
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            _FloorPlanPreview(rooms: plan.rooms),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.square_foot_outlined,
+                                  size: 16,
+                                  color: AppColors.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  plan.area,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: AppColors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: plan.rooms.map((r) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceContainer,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    r,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
     );
   }
 }

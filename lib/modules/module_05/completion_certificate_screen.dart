@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/share_download_service.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
@@ -8,6 +9,33 @@ import '../../theme/app_theme.dart';
 
 class CompletionCertificateScreen extends StatelessWidget {
   const CompletionCertificateScreen({super.key});
+
+  Future<void> _downloadAndFinish(BuildContext context) async {
+    final screen = stitchScreens[14];
+    final project = projectFromRoute(context);
+    const completionDate = '10 August 2026';
+
+    final content = '''
+GOVERNMENT OF PUNJAB — ACAG
+Completion Certificate
+----------------------
+Project ID: ${project.id}
+Title: ${project.title}
+Owner: ${project.ownerName}
+Address: ${project.address}, ${project.city}
+Engineer: ${project.engineerName}
+Completion Date: $completionDate
+Consultancy: The Urban Unit
+'''.trim();
+
+    await ShareDownloadService.downloadTextFile(
+      fileName: '${project.id}_completion_certificate.txt',
+      content: content,
+    );
+
+    if (!context.mounted) return;
+    navigateStitchNext(context, screen);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,8 +48,8 @@ class CompletionCertificateScreen extends StatelessWidget {
       screen: screen,
       moduleDescription:
           'Official completion certificate issued by ACAG — Government of Punjab.',
-      bottomLabel: 'Download Certificate (PDF)',
-      onBottomPressed: () => navigateStitchNext(context, screen),
+      bottomLabel: 'Download Certificate',
+      onBottomPressed: () => _downloadAndFinish(context),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

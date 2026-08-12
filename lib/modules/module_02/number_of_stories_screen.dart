@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/project_service.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
@@ -14,7 +15,9 @@ class NumberOfStoriesScreen extends StatefulWidget {
 }
 
 class _NumberOfStoriesScreenState extends State<NumberOfStoriesScreen> {
-  int _stories = 2;
+  int? _stories;
+  bool _loading = true;
+  bool _saving = false;
 
   static const _options = [
     (count: 1, label: 'Single Story', desc: 'Ground floor only — ideal for 5–10 marla plots'),
@@ -23,18 +26,71 @@ class _NumberOfStoriesScreenState extends State<NumberOfStoriesScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final project = projectFromRoute(context);
+    try {
+      final row = await ProjectService.getStories(project.id);
+      if (!mounted) return;
+      if (row != null) {
+        _stories = (row['stories_count'] as num?)?.toInt();
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _continue() async {
+    final screen = stitchScreens[4];
+    final project = projectFromRoute(context);
+    if (_stories == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select number of stories')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ProjectService.saveStories(
+        projectCodeOrId: project.id,
+        storiesCount: _stories!,
+      );
+      if (!mounted) return;
+      await navigateStitchNext(context, screen);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final screen = stitchScreens[4];
     final theme = Theme.of(context);
-    projectFromRoute(context);
 
     return StitchFlowScaffold(
       screen: screen,
       moduleDescription:
           'Select the number of stories for structural and foundation calculations.',
-      bottomLabel: 'Continue to Soil Analysis',
-      onBottomPressed: () => navigateStitchNext(context, screen),
-      body: Column(
+      bottomLabel: _saving ? 'Saving…' : 'Continue to Soil Analysis',
+      onBottomPressed: (_loading || _saving) ? null : _continue,
+      body: _loading
+          ? const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -90,9 +146,7 @@ class _NumberOfStoriesScreenState extends State<NumberOfStoriesScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            count == 1
-                                ? 'Story'
-                                : 'Stories',
+                            count == 1 ? 'Story' : 'Stories',
                             style: theme.textTheme.labelMedium?.copyWith(
                               color: selected
                                   ? AppColors.onPrimary.withValues(alpha: 0.9)

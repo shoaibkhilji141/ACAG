@@ -1,8 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../shared/constants/app_constants.dart';
 import '../../shared/constants/construction_modules.dart';
 import '../../shared/models/models.dart';
+import '../../shared/services/map_launch_service.dart';
+import '../../shared/services/project_service.dart';
+import '../../shared/services/share_download_service.dart';
+import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/mock_data.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -17,20 +24,160 @@ class ProjectDetailsScreen extends StatefulWidget {
 
 class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
   int _selectedTab = 0;
+  Map<int, bool> _moduleDone = {};
+  List<Map<String, dynamic>> _images = [];
+  List<MaterialLine> _materials = [];
+  Map<String, dynamic>? _plot;
+  bool _loadingMeta = true;
 
-  static const _tabs = ['Details', 'Images (8)', 'AI Status', 'Materials'];
   static const _progressSteps = [
-    _ProgressStep('DPC', done: true),
-    _ProgressStep('Brick Work', done: true, active: true),
-    _ProgressStep('Roof', done: false),
-    _ProgressStep('Plaster', done: false),
-    _ProgressStep('Finishing', done: false),
+    _ProgressStep('DPC'),
+    _ProgressStep('Brick Work'),
+    _ProgressStep('Roof'),
+    _ProgressStep('Plaster'),
+    _ProgressStep('Finishing'),
   ];
+
+  ProjectModel get _project {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    return args is ProjectModel ? args : MockData.primaryProject;
+  }
+
+  List<String> get _tabs => [
+        'Details',
+        'Images (${_images.length})',
+        'AI Status',
+        'Materials',
+      ];
+
+  double get _moduleProgress => ProjectService.progressFromModules(_moduleDone);
+
+  String get _modulePhase => ProjectService.phaseFromModules(_moduleDone);
+
+  @override
+  void initState() {
+    super.initState();
+    ProjectService.moduleCompletionVersion.addListener(_onModuleCompletion);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshMeta());
+  }
+
+  @override
+  void dispose() {
+    ProjectService.moduleCompletionVersion.removeListener(_onModuleCompletion);
+    super.dispose();
+  }
+
+  void _onModuleCompletion() {
+    if (mounted) _refreshMeta();
+  }
+
+  Future<void> _refreshMeta() async {
+    final project = _project;
+    setState(() => _loadingMeta = true);
+    try {
+      final done = await ProjectService.getModuleCompletionMap(project.id);
+      final images = await ProjectService.listProjectImages(project.id);
+      final materials = await ProjectService.getMaterialLines(project.id);
+      final plot = await ProjectService.getPlotDimensions(project.id);
+      if (!mounted) return;
+      setState(() {
+        _moduleDone = done;
+        _images = images;
+        _materials = materials;
+        _plot = plot;
+        _loadingMeta = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingMeta = false);
+    }
+  }
+
+  Future<void> _shareProject() async {
+    await ShareDownloadService.shareProjectDetails(_project);
+  }
+
+  Future<void> _captureProjectImage() async {
+    final picker = ImagePicker();
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take Photo'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    final picked = await picker.pickImage(
+      source: source,
+      maxWidth: 1600,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+
+    try {
+      final base64 = await encodeFileToBase64(File(picked.path));
+      await ProjectService.addProjectImageBase64(
+        projectCodeOrId: _project.id,
+        imageBase64: base64,
+        caption: 'Project photo',
+      );
+      await _refreshMeta();
+      if (!mounted) return;
+      setState(() => _selectedTab = 1);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Image added to project')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openModule(ConstructionModuleInfo module) async {
+    await Navigator.of(context).pushNamed(
+      module.firstScreenRoute,
+      arguments: _project,
+    );
+    if (mounted) await _refreshMeta();
+  }
+
+  Future<void> _viewOnMap() async {
+    try {
+      await MapLaunchService.openProjectLocation(_project);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final project = projectFromRoute(context);
+    final project = _project;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -41,55 +188,74 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
         surfaceTintColor: Colors.transparent,
         actions: [
           IconButton(
+            tooltip: 'Add photo',
+            icon: const Icon(Icons.photo_camera_outlined, color: AppColors.primary),
+            onPressed: _captureProjectImage,
+          ),
+          IconButton(
+            tooltip: 'Share',
             icon: const Icon(Icons.share_outlined, color: AppColors.primary),
-            onPressed: () {},
+            onPressed: _shareProject,
           ),
         ],
       ),
       body: Column(
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _ProjectHero(project: project),
-                  const SizedBox(height: 20),
-                  _ProgressOverview(
-                    phase: project.phase,
-                    progress: project.progress,
-                  ),
-                  const SizedBox(height: 20),
-                  _TabBar(
-                    tabs: _tabs,
-                    selected: _selectedTab,
-                    onSelected: (i) => setState(() => _selectedTab = i),
-                  ),
-                  const SizedBox(height: 16),
-                  if (_selectedTab == 0) _DetailsTab(project: project),
-                  if (_selectedTab == 1) _PlaceholderTab(label: 'Project images'),
-                  if (_selectedTab == 2) _PlaceholderTab(label: 'AI validation status'),
-                  if (_selectedTab == 3) _PlaceholderTab(label: 'Materials overview'),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Construction Modules',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+            child: RefreshIndicator(
+              onRefresh: _refreshMeta,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _ProjectHero(project: project),
+                    const SizedBox(height: 20),
+                    _ProgressOverview(
+                      phase: _modulePhase,
+                      progress: _moduleProgress,
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  for (final module in constructionModules) ...[
-                    _ModuleRow(
-                      module: module,
-                      onTap: () => Navigator.of(context).pushNamed(
-                        module.firstScreenRoute,
-                        arguments: project,
+                    const SizedBox(height: 20),
+                    _TabBar(
+                      tabs: _tabs,
+                      selected: _selectedTab,
+                      onSelected: (i) => setState(() => _selectedTab = i),
+                    ),
+                    const SizedBox(height: 16),
+                    if (_selectedTab == 0)
+                      _DetailsTab(project: project, plot: _plot),
+                    if (_selectedTab == 1)
+                      _ImagesTab(
+                        images: _images,
+                        loading: _loadingMeta,
+                        onAdd: _captureProjectImage,
+                      ),
+                    if (_selectedTab == 2)
+                      const _PlaceholderTab(label: 'AI validation status'),
+                    if (_selectedTab == 3)
+                      _MaterialsTab(
+                        materials: _materials,
+                        loading: _loadingMeta,
+                      ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Construction Modules',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
+                    for (final module in constructionModules) ...[
+                      _ModuleRow(
+                        module: module,
+                        completed: _moduleDone[int.parse(module.number)] == true,
+                        onTap: () => _openModule(module),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -118,10 +284,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
                   width: double.infinity,
                   height: 52,
                   child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pushNamed(
-                      AppRoutes.engineerGps,
-                      arguments: project,
-                    ),
+                    onPressed: _viewOnMap,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.primary,
                       side: const BorderSide(color: AppColors.primary),
@@ -140,6 +303,75 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ImagesTab extends StatelessWidget {
+  const _ImagesTab({
+    required this.images,
+    required this.loading,
+    required this.onAdd,
+  });
+
+  final List<Map<String, dynamic>> images;
+  final bool loading;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && images.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (images.isEmpty) {
+      return FluentCard(
+        child: Column(
+          children: [
+            const Icon(Icons.image_not_supported_outlined, color: AppColors.outline),
+            const SizedBox(height: 8),
+            Text(
+              'No images yet (0)',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+            ),
+            TextButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.photo_camera_outlined),
+              label: const Text('Add Photo'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: images.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+      ),
+      itemBuilder: (context, index) {
+        final bytes = decodeBase64Image(images[index]['image_base64'] as String?);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: bytes == null
+              ? Container(
+                  color: AppColors.surfaceContainer,
+                  child: const Icon(Icons.broken_image_outlined),
+                )
+              : Image.memory(bytes, fit: BoxFit.cover),
+        );
+      },
     );
   }
 }
@@ -276,7 +508,8 @@ class _ProjectHero extends StatelessWidget {
         const SizedBox(height: 10),
         Row(
           children: [
-            const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.outline),
+            const Icon(Icons.calendar_today_outlined,
+                size: 16, color: AppColors.outline),
             const SizedBox(width: 6),
             Text(
               'Start Date',
@@ -302,7 +535,7 @@ class _ProjectHero extends StatelessWidget {
     if (parts.length >= 2) {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     }
-    return name.substring(0, 2).toUpperCase();
+    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
   }
 
   static String _shortName(String name) {
@@ -463,9 +696,7 @@ class _ProgressOverview extends StatelessWidget {
                 Expanded(
                   child: Container(
                     height: 2,
-                    color: _ProjectDetailsScreenState._progressSteps[i].done
-                        ? AppColors.primary
-                        : AppColors.outlineVariant.withValues(alpha: 0.4),
+                    color: AppColors.outlineVariant.withValues(alpha: 0.4),
                   ),
                 ),
             ],
@@ -477,11 +708,9 @@ class _ProgressOverview extends StatelessWidget {
 }
 
 class _ProgressStep {
-  const _ProgressStep(this.label, {this.done = false, this.active = false});
+  const _ProgressStep(this.label);
 
   final String label;
-  final bool done;
-  final bool active;
 }
 
 class _StepNode extends StatelessWidget {
@@ -499,28 +728,21 @@ class _StepNode extends StatelessWidget {
           width: 24,
           height: 24,
           decoration: BoxDecoration(
-            color: step.done ? AppColors.primary : AppColors.surfaceLowest,
+            color: AppColors.surfaceLowest,
             shape: BoxShape.circle,
             border: Border.all(
-              color: step.done
-                  ? AppColors.primary
-                  : AppColors.outlineVariant,
+              color: AppColors.outlineVariant,
               width: 2,
             ),
           ),
-          child: step.done
-              ? const Icon(Icons.check, size: 14, color: AppColors.onPrimary)
-              : null,
         ),
         const SizedBox(height: 4),
         Text(
           step.label,
           style: theme.textTheme.labelSmall?.copyWith(
             fontSize: 9,
-            fontWeight: step.active ? FontWeight.w700 : FontWeight.w500,
-            color: step.active || step.done
-                ? AppColors.primary
-                : AppColors.outline,
+            fontWeight: FontWeight.w500,
+            color: AppColors.outline,
           ),
           textAlign: TextAlign.center,
         ),
@@ -568,6 +790,7 @@ class _TabBar extends StatelessWidget {
                       ? AppColors.primary
                       : AppColors.onSurfaceVariant,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 11,
                 ),
               ),
             ),
@@ -579,21 +802,39 @@ class _TabBar extends StatelessWidget {
 }
 
 class _DetailsTab extends StatelessWidget {
-  const _DetailsTab({required this.project});
+  const _DetailsTab({required this.project, this.plot});
 
   final ProjectModel project;
+  final Map<String, dynamic>? plot;
 
   @override
   Widget build(BuildContext context) {
+    final length = plot?['length'];
+    final width = plot?['width'];
+    final unit = plot?['unit'] as String?;
+    final area = plot?['total_area'];
+
+    final plotSize = (length != null && width != null && unit != null)
+        ? '${_num(length)} × ${_num(width)} $unit'
+        : '—';
+    final constructionArea = area != null ? '${_num(area)} Sq.ft' : '—';
+
     return Column(
       children: [
-        _DetailRow(label: 'Plot Size', value: '5 Marla'),
-        _DetailRow(label: 'Construction Area', value: '1,250 Sq.ft'),
-        _DetailRow(label: 'Estimated Completion', value: '10 Sep 2025'),
-        _DetailRow(label: 'Assigned Date', value: '10 Apr 2025'),
-        _DetailRow(label: 'Last Inspection', value: project.nextInspection),
+        _DetailRow(label: 'Plot Size', value: plotSize),
+        _DetailRow(label: 'Construction Area', value: constructionArea),
+        _DetailRow(label: 'Address', value: '${project.address}, ${project.city}'),
+        _DetailRow(label: 'Owner', value: project.ownerName),
+        _DetailRow(label: 'Engineer', value: project.engineerName),
       ],
     );
+  }
+
+  static String _num(dynamic v) {
+    if (v is num) {
+      return v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
+    }
+    return '$v';
   }
 }
 
@@ -631,6 +872,89 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
+class _MaterialsTab extends StatelessWidget {
+  const _MaterialsTab({
+    required this.materials,
+    required this.loading,
+  });
+
+  final List<MaterialLine> materials;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (loading && materials.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (materials.isEmpty) {
+      return FluentCard(
+        child: Text(
+          'No materials saved yet. Complete Material Estimation module.',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
+    return FluentCard(
+      padding: const EdgeInsets.all(0),
+      child: Column(
+        children: [
+          for (var i = 0; i < materials.length; i++) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          materials[i].name,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          materials[i].unit,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    materials[i].qty,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (i < materials.length - 1)
+              Divider(
+                height: 1,
+                color: AppColors.outlineVariant.withValues(alpha: 0.4),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _PlaceholderTab extends StatelessWidget {
   const _PlaceholderTab({required this.label});
 
@@ -652,10 +976,12 @@ class _PlaceholderTab extends StatelessWidget {
 class _ModuleRow extends StatelessWidget {
   const _ModuleRow({
     required this.module,
+    required this.completed,
     required this.onTap,
   });
 
   final ConstructionModuleInfo module;
+  final bool completed;
   final VoidCallback onTap;
 
   @override
@@ -680,12 +1006,20 @@ class _ModuleRow extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 8,
-                height: 8,
+                width: 22,
+                height: 22,
                 decoration: BoxDecoration(
-                  color: module.statusColor,
+                  color: completed
+                      ? AppColors.primary
+                      : module.statusColor.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
+                  border: Border.all(
+                    color: completed ? AppColors.primary : module.statusColor,
+                  ),
                 ),
+                child: completed
+                    ? const Icon(Icons.check, size: 14, color: AppColors.onPrimary)
+                    : null,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -696,7 +1030,11 @@ class _ModuleRow extends StatelessWidget {
                   ),
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.outline, size: 20),
+              Icon(
+                completed ? Icons.check_circle : Icons.chevron_right,
+                color: completed ? AppColors.primary : AppColors.outline,
+                size: 20,
+              ),
             ],
           ),
         ),
@@ -705,7 +1043,6 @@ class _ModuleRow extends StatelessWidget {
   }
 }
 
-// Re-export for backward compatibility with engineer workflow screens.
 ProjectModel projectFromRoute(BuildContext context) {
   final args = ModalRoute.of(context)?.settings.arguments;
   return args is ProjectModel ? args : MockData.primaryProject;

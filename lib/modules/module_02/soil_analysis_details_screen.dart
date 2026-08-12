@@ -1,6 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/project_service.dart';
+import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
@@ -16,9 +21,14 @@ class SoilAnalysisDetailsScreen extends StatefulWidget {
 
 class _SoilAnalysisDetailsScreenState extends State<SoilAnalysisDetailsScreen> {
   int _soilTypeIndex = 0;
-  bool _hasEvidencePhoto = false;
-  final _bearingController = TextEditingController(text: '180');
-  final _waterTableController = TextEditingController(text: '2.5');
+  File? _evidencePhoto;
+  String? _evidenceBase64;
+  bool _savingPhoto = false;
+  bool _loading = true;
+  bool _saving = false;
+  final _bearingController = TextEditingController();
+  final _waterTableController = TextEditingController();
+  final _picker = ImagePicker();
 
   static const _soilTypes = [
     ('Clayey Soil', 'High cohesion, moderate bearing'),
@@ -28,10 +38,145 @@ class _SoilAnalysisDetailsScreenState extends State<SoilAnalysisDetailsScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
   void dispose() {
     _bearingController.dispose();
     _waterTableController.dispose();
     super.dispose();
+  }
+
+  Future<void> _load() async {
+    final project = projectFromRoute(context);
+    try {
+      final row = await ProjectService.getSoilAnalysis(project.id);
+      if (!mounted) return;
+      if (row != null) {
+        final type = row['soil_type'] as String? ?? '';
+        final idx = _soilTypes.indexWhere((s) => s.$1 == type);
+        if (idx >= 0) _soilTypeIndex = idx;
+        final bearing = row['bearing_capacity_kn_m2'];
+        final water = row['water_table_depth_m'];
+        if (bearing != null) {
+          _bearingController.text = bearing is num
+              ? (bearing == bearing.roundToDouble()
+                  ? '${bearing.round()}'
+                  : bearing.toStringAsFixed(1))
+              : '$bearing';
+        }
+        if (water != null) {
+          _waterTableController.text = water is num
+              ? (water == water.roundToDouble()
+                  ? '${water.round()}'
+                  : water.toStringAsFixed(1))
+              : '$water';
+        }
+        _evidenceBase64 = row['evidence_photo_base64'] as String?;
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _continue() async {
+    final screen = stitchScreens[5];
+    final project = projectFromRoute(context);
+    setState(() => _saving = true);
+    try {
+      final bearing = double.tryParse(_bearingController.text);
+      final water = double.tryParse(_waterTableController.text);
+      final note =
+          'Recommended foundation: ${_soilTypeIndex <= 1 ? 'Raft' : 'Strip'} '
+          'footing at ${(water ?? 2.5) + 1.2}m depth.';
+      await ProjectService.saveSoilAnalysis(
+        projectCodeOrId: project.id,
+        soilType: _soilTypes[_soilTypeIndex].$1,
+        bearingCapacity: bearing,
+        waterTableDepth: water,
+        recommendedNote: note,
+        evidencePhotoBase64: _evidenceBase64,
+      );
+      if (!mounted) return;
+      await navigateStitchNext(context, screen);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _pickEvidencePhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take Photo'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    final picked = await _picker.pickImage(
+      source: source,
+      maxWidth: 1280,
+      imageQuality: 75,
+    );
+    if (picked == null) return;
+
+    final file = File(picked.path);
+    setState(() {
+      _evidencePhoto = file;
+      _savingPhoto = true;
+    });
+
+    try {
+      final project = projectFromRoute(context);
+      final base64 = await encodeFileToBase64(file);
+      await ProjectService.addProjectImageBase64(
+        projectCodeOrId: project.id,
+        imageBase64: base64,
+        caption: 'Soil site evidence',
+      );
+      if (!mounted) return;
+      setState(() {
+        _evidenceBase64 = base64;
+        _savingPhoto = false;
+      });
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        const SnackBar(content: Text('Evidence photo saved to project images')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _savingPhoto = false);
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   @override
@@ -44,9 +189,14 @@ class _SoilAnalysisDetailsScreenState extends State<SoilAnalysisDetailsScreen> {
       screen: screen,
       moduleDescription:
           'Enter soil test results for foundation design and depth recommendations.',
-      bottomLabel: 'Generate Foundation Drawing',
-      onBottomPressed: () => navigateStitchNext(context, screen),
-      body: Column(
+      bottomLabel: _saving ? 'Saving…' : 'Generate Foundation Drawing',
+      onBottomPressed: (_loading || _saving) ? null : _continue,
+      body: _loading
+          ? const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -170,8 +320,11 @@ class _SoilAnalysisDetailsScreenState extends State<SoilAnalysisDetailsScreen> {
           ),
           const SizedBox(height: 20),
           _SiteEvidencePhotoCard(
-            hasPhoto: _hasEvidencePhoto,
-            onTap: () => setState(() => _hasEvidencePhoto = true),
+            hasPhoto: _evidencePhoto != null ||
+                (_evidenceBase64 != null && _evidenceBase64!.isNotEmpty),
+            saving: _savingPhoto,
+            preview: _evidencePhoto,
+            onTap: _savingPhoto ? null : _pickEvidencePhoto,
           ),
         ],
       ),
@@ -182,11 +335,15 @@ class _SoilAnalysisDetailsScreenState extends State<SoilAnalysisDetailsScreen> {
 class _SiteEvidencePhotoCard extends StatelessWidget {
   const _SiteEvidencePhotoCard({
     required this.hasPhoto,
+    required this.saving,
     required this.onTap,
+    this.preview,
   });
 
   final bool hasPhoto;
-  final VoidCallback onTap;
+  final bool saving;
+  final VoidCallback? onTap;
+  final File? preview;
 
   @override
   Widget build(BuildContext context) {
@@ -225,38 +382,58 @@ class _SiteEvidencePhotoCard extends StatelessWidget {
                     color: AppColors.background,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        hasPhoto
-                            ? Icons.check_circle_outline
-                            : Icons.photo_camera_outlined,
-                        size: 28,
-                        color: hasPhoto
-                            ? AppColors.primary
-                            : AppColors.outline,
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        hasPhoto
-                            ? 'Site evidence photo added'
-                            : 'Upload site evidence photo',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.onSurfaceVariant,
+                  child: saving
+                      ? const Center(
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          ),
+                        )
+                      : Column(
+                          children: [
+                            if (preview != null) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(
+                                  preview!,
+                                  height: 120,
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
+                            Icon(
+                              hasPhoto
+                                  ? Icons.check_circle_outline
+                                  : Icons.photo_camera_outlined,
+                              size: 28,
+                              color: hasPhoto
+                                  ? AppColors.primary
+                                  : AppColors.outline,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              hasPhoto
+                                  ? 'Site evidence photo added'
+                                  : 'Upload site evidence photo',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Photo of exposed soil at excavation',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: AppColors.outline,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Photo of exposed soil at excavation',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.outline,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),

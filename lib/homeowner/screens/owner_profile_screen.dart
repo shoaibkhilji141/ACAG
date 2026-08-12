@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../shared/constants/app_constants.dart';
 import '../../shared/services/auth_service.dart';
+import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/mock_data.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/section_header.dart';
@@ -38,15 +39,16 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
       _name = profile?['full_name'] as String? ?? MockData.ownerName;
       _location =
           profile?['location_text'] as String? ?? MockData.ownerLocation;
-      _imageUrl = profile?['profile_image_url'] as String?;
+      _imageUrl = profile?['profile_image_base64'] as String? ??
+          profile?['profile_image_url'] as String?;
     });
   }
 
   Future<void> _pickImage() async {
     final picked = await _picker.pickImage(
       source: ImageSource.gallery,
-      maxWidth: 1024,
-      imageQuality: 85,
+      maxWidth: 800,
+      imageQuality: 70,
     );
     if (picked == null) return;
 
@@ -57,15 +59,25 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     });
 
     try {
-      final url = await AuthService.uploadAvatar(file);
+      final saved = await AuthService.uploadAvatar(file);
       if (!mounted) return;
       setState(() {
-        _imageUrl = url ?? _imageUrl;
+        _imageUrl = saved ?? _imageUrl;
+        _localImage = null;
         _uploading = false;
       });
-    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo updated')),
+      );
+    } catch (e) {
       if (!mounted) return;
       setState(() => _uploading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
 
@@ -108,10 +120,9 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                         backgroundColor: AppColors.primaryContainer,
                         backgroundImage: _localImage != null
                             ? FileImage(_localImage!)
-                            : (_imageUrl != null
-                                ? NetworkImage(_imageUrl!)
-                                : null) as ImageProvider?,
-                        child: (_localImage == null && _imageUrl == null)
+                            : imageProviderFromBase64(_imageUrl),
+                        child: (_localImage == null &&
+                                imageProviderFromBase64(_imageUrl) == null)
                             ? Text(
                                 initials.isEmpty ? 'AR' : initials,
                                 style: theme.textTheme.headlineMedium?.copyWith(

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
+import '../../constants/app_constants.dart';
 import '../../constants/stitch_screens.dart';
+import '../../services/project_service.dart';
 import '../../utils/project_route.dart';
 import '../../widgets/primary_button.dart';
 
@@ -71,7 +73,7 @@ class StitchFlowScaffold extends StatelessWidget {
               ),
             ),
           ),
-          if (bottomLabel != null && onBottomPressed != null)
+          if (bottomLabel != null)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -193,12 +195,49 @@ class _ModuleIntroCard extends StatelessWidget {
   }
 }
 
-void navigateStitchNext(BuildContext context, StitchScreenDef screen) {
+Future<void> navigateStitchNext(
+  BuildContext context,
+  StitchScreenDef screen,
+) async {
   final project = projectFromRoute(context);
   final next = screen.nextRoute;
+
   if (next == null) {
-    Navigator.of(context).pop();
+    final isModuleFinale = screen.stepInModule == screen.totalStepsInModule;
+    final moduleNo = int.tryParse(screen.moduleNumber) ?? 0;
+
+    if (isModuleFinale && moduleNo > 0) {
+      try {
+        await ProjectService.completeModule(
+          projectCodeOrId: project.id,
+          moduleNo: moduleNo,
+        );
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                e.toString().replaceFirst('Exception: ', ''),
+              ),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
+
+    if (!context.mounted) return;
+
+    final navigator = Navigator.of(context);
+    navigator.popUntil((route) {
+      final name = route.settings.name;
+      return name == AppRoutes.engineerProjectDetails ||
+          name == AppRoutes.ownerShell ||
+          name == AppRoutes.engineerShell ||
+          route.isFirst;
+    });
     return;
   }
-  Navigator.of(context).pushReplacementNamed(next, arguments: project);
+
+  await Navigator.of(context).pushReplacementNamed(next, arguments: project);
 }

@@ -1,6 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/project_service.dart';
+import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
@@ -15,7 +20,9 @@ class PhotoUploadScreen extends StatefulWidget {
 
 class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
   final _descriptionController = TextEditingController();
-  bool _hasPhoto = false;
+  final _picker = ImagePicker();
+  File? _photoFile;
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -23,18 +30,65 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
     super.dispose();
   }
 
+  Future<void> _pick(ImageSource source) async {
+    final picked = await _picker.pickImage(
+      source: source,
+      maxWidth: 1280,
+      imageQuality: 75,
+    );
+    if (picked == null) return;
+    setState(() => _photoFile = File(picked.path));
+  }
+
+  Future<void> _submit(BuildContext context) async {
+    final screen = stitchScreens[10];
+    final project = projectFromRoute(context);
+
+    if (_photoFile != null) {
+      setState(() => _saving = true);
+      try {
+        final base64 = await encodeFileToBase64(_photoFile!);
+        await ProjectService.addProjectImageBase64(
+          projectCodeOrId: project.id,
+          imageBase64: base64,
+          caption: _descriptionController.text.trim().isEmpty
+              ? 'Progress photo'
+              : _descriptionController.text.trim(),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _saving = false);
+    }
+
+    if (!context.mounted) return;
+    await navigateStitchNext(context, screen);
+  }
+
   @override
   Widget build(BuildContext context) {
     final screen = stitchScreens[10];
     final theme = Theme.of(context);
     projectFromRoute(context);
+    final hasPhoto = _photoFile != null;
 
     return StitchFlowScaffold(
       screen: screen,
       moduleDescription:
           'Document on-site progress with geo-tagged photos for QA review.',
-      bottomLabel: 'Submit Progress Update',
-      onBottomPressed: () => navigateStitchNext(context, screen),
+      bottomLabel: _saving ? 'Saving…' : 'Submit Progress Update',
+      onBottomPressed: () {
+        if (!_saving) _submit(context);
+      },
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -58,7 +112,7 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
                 child: _PhotoActionButton(
                   icon: Icons.camera_alt_outlined,
                   label: 'Take Photo',
-                  onTap: () => setState(() => _hasPhoto = true),
+                  onTap: () => _pick(ImageSource.camera),
                 ),
               ),
               const SizedBox(width: 12),
@@ -66,7 +120,7 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
                 child: _PhotoActionButton(
                   icon: Icons.photo_library_outlined,
                   label: 'From Gallery',
-                  onTap: () => setState(() => _hasPhoto = true),
+                  onTap: () => _pick(ImageSource.gallery),
                 ),
               ),
             ],
@@ -78,18 +132,17 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
               height: 160,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: _hasPhoto
+                color: hasPhoto
                     ? AppColors.surfaceLow
                     : AppColors.surfaceContainer.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: _hasPhoto
+              clipBehavior: Clip.antiAlias,
+              child: hasPhoto
                   ? Stack(
                       fit: StackFit.expand,
                       children: [
-                        CustomPaint(
-                          painter: _SitePhotoPlaceholderPainter(),
-                        ),
+                        Image.file(_photoFile!, fit: BoxFit.cover),
                         Positioned(
                           top: 8,
                           right: 8,
@@ -122,92 +175,29 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
                             ),
                           ),
                         ),
-                        Center(
-                          child: IconButton(
-                            onPressed: () => setState(() => _hasPhoto = false),
-                            icon: const Icon(Icons.close, color: AppColors.error),
-                          ),
-                        ),
                       ],
                     )
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.add_a_photo_outlined,
-                          size: 40,
-                          color: AppColors.outline.withValues(alpha: 0.6),
+                  : Center(
+                      child: Text(
+                        'No photo selected',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: AppColors.onSurfaceVariant,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'No photo selected',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: AppColors.outline,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
             ),
           ),
           const SizedBox(height: 16),
-          Text(
-            'Work Description',
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
           TextField(
             controller: _descriptionController,
-            maxLines: 4,
+            maxLines: 3,
             decoration: InputDecoration(
-              hintText:
-                  'Describe work completed today (e.g. external plaster 80% done on north wall)...',
+              labelText: 'Description (optional)',
               filled: true,
               fillColor: AppColors.surfaceLowest,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.warning.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.warning.withValues(alpha: 0.35),
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.warning_amber_rounded, color: AppColors.warning),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Photo Guidelines',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.tertiary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Ensure photos are taken on-site with clear visibility. '
-                        'Blurry or off-site images will be rejected by AI validation.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ),
           ),
         ],
@@ -230,7 +220,6 @@ class _PhotoActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Material(
       color: AppColors.surfaceLowest,
       borderRadius: BorderRadius.circular(12),
@@ -238,22 +227,21 @@ class _PhotoActionButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 20),
+          padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: AppColors.primary.withValues(alpha: 0.3),
+              color: AppColors.outlineVariant.withValues(alpha: 0.4),
             ),
           ),
           child: Column(
             children: [
-              Icon(icon, color: AppColors.primary, size: 28),
+              Icon(icon, color: AppColors.primary),
               const SizedBox(height: 8),
               Text(
                 label,
-                style: theme.textTheme.labelLarge?.copyWith(
+                style: theme.textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
                 ),
               ),
             ],
@@ -262,35 +250,4 @@ class _PhotoActionButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SitePhotoPlaceholderPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final sky = Paint()..color = AppColors.surfaceHigh;
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height * 0.4), sky);
-
-    final wall = Paint()..color = AppColors.outline.withValues(alpha: 0.4);
-    canvas.drawRect(
-      Rect.fromLTWH(size.width * 0.1, size.height * 0.35, size.width * 0.8, size.height * 0.55),
-      wall,
-    );
-
-    final scaffold = Paint()
-      ..color = AppColors.secondary
-      ..strokeWidth = 2;
-    canvas.drawLine(
-      Offset(size.width * 0.15, size.height * 0.3),
-      Offset(size.width * 0.15, size.height * 0.9),
-      scaffold,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.85, size.height * 0.3),
-      Offset(size.width * 0.85, size.height * 0.9),
-      scaffold,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

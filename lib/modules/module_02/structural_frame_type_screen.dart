@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/project_service.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
@@ -15,7 +16,9 @@ class StructuralFrameTypeScreen extends StatefulWidget {
 }
 
 class _StructuralFrameTypeScreenState extends State<StructuralFrameTypeScreen> {
-  int _frameType = 0;
+  int? _frameType;
+  bool _loading = true;
+  bool _saving = false;
 
   static const _options = [
     (
@@ -35,18 +38,73 @@ class _StructuralFrameTypeScreenState extends State<StructuralFrameTypeScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final project = projectFromRoute(context);
+    try {
+      final row = await ProjectService.getStructuralFrame(project.id);
+      if (!mounted) return;
+      if (row != null) {
+        final type = row['frame_type'] as String? ?? '';
+        final idx = _options.indexWhere((o) => o.title == type);
+        if (idx >= 0) _frameType = idx;
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _save() async {
+    final screen = stitchScreens[7];
+    final project = projectFromRoute(context);
+    if (_frameType == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a structural frame type')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ProjectService.saveStructuralFrame(
+        projectCodeOrId: project.id,
+        frameType: _options[_frameType!].title,
+      );
+      if (!mounted) return;
+      await navigateStitchNext(context, screen);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final screen = stitchScreens[7];
     final theme = Theme.of(context);
-    projectFromRoute(context);
 
     return StitchFlowScaffold(
       screen: screen,
       moduleDescription:
           'Choose the structural system for your building based on stories and budget.',
-      bottomLabel: 'Confirm Structural Frame',
-      onBottomPressed: () => navigateStitchNext(context, screen),
-      body: Column(
+      bottomLabel: _saving ? 'Saving…' : 'Confirm Structural Frame',
+      onBottomPressed: (_loading || _saving) ? null : _save,
+      body: _loading
+          ? const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(

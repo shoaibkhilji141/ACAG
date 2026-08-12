@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/app_constants.dart';
+import '../utils/image_base64.dart';
 
 class AuthService {
   AuthService._();
@@ -26,7 +27,9 @@ class AuthService {
 
     final profile = await client
         .from('profiles')
-        .select('role, full_name, location_text, city, profile_image_url')
+        .select(
+          'role, full_name, location_text, city, profile_image_base64, profile_image_url',
+        )
         .eq('id', userId)
         .maybeSingle();
 
@@ -69,30 +72,38 @@ class AuthService {
     return await client.from('profiles').select().eq('id', userId).maybeSingle();
   }
 
+  /// Saves profile image as base64 in `profiles.profile_image_base64` (no Storage).
   static Future<String?> uploadAvatar(File file) async {
     final userId = client.auth.currentUser?.id;
-    if (userId == null) return null;
+    if (userId == null) {
+      throw Exception('Please login again to update profile photo.');
+    }
 
     final ext = file.path.split('.').last.toLowerCase();
-    final objectPath = '$userId/avatar.$ext';
+    final mime = switch (ext) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
 
-    await client.storage.from('avatars').upload(
-          objectPath,
-          file,
-          fileOptions: FileOptions(
-            upsert: true,
-            contentType: 'image/$ext',
-          ),
-        );
+    final base64 = await encodeFileToBase64(file, mime: mime);
+    if (base64.length > 900000) {
+      throw Exception('Photo too large. Try a smaller image.');
+    }
 
-    // Bust cache after replace.
-    final publicUrl =
-        '${client.storage.from('avatars').getPublicUrl(objectPath)}?t=${DateTime.now().millisecondsSinceEpoch}';
+    final updated = await client
+        .from('profiles')
+        .update({
+          'profile_image_base64': base64,
+          'profile_image_url': null,
+        })
+        .eq('id', userId)
+        .select('id');
 
-    await client.from('profiles').update({
-      'profile_image_url': publicUrl,
-    }).eq('id', userId);
+    if ((updated as List).isEmpty) {
+      throw Exception('Could not save profile photo.');
+    }
 
-    return publicUrl;
+    return base64;
   }
 }
