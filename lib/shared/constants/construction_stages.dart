@@ -3,13 +3,21 @@ class ConstructionStages {
   ConstructionStages._();
 
   static const stages = <String>[
-    'Foundation & Plinth',
-    'Structure (Columns & Beams)',
-    'Brickwork & Plaster',
-    'Roof Slab & Waterproofing',
-    'Electrical & Plumbing',
-    'Finishing & Paint',
-    'Final Inspection & Handover',
+    'Site Preparation / Layout Marking',
+    'Excavation Completed',
+    'Foundation Completed',
+    'Foundation Backfilling Completed',
+    'Damp Proof Course (DPC) Completed',
+    'Plinth Filling & Compaction Completed',
+    'Wall Masonry up to Lintel Level Completed',
+    'Lintel Completed',
+    'Roof Slab (RCC) Cast Completed',
+    'Plastering Completed',
+    'Flooring Completed',
+    'Doors & Windows Installed',
+    'Electrical & Plumbing Completed',
+    'Paint & Finishing Completed',
+    'House Construction Completed',
   ];
 
   static String nameFor(int stageNo) {

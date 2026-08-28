@@ -3,12 +3,13 @@
 CREATE TABLE IF NOT EXISTS public.module04_construction_stages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
-  stage_no int NOT NULL CHECK (stage_no BETWEEN 1 AND 7),
+  stage_no int NOT NULL CHECK (stage_no BETWEEN 1 AND 15),
   stage_name text NOT NULL,
   image_base64 text,
   description text DEFAULT '',
   completed_at timestamptz DEFAULT now(),
   completed_by uuid REFERENCES auth.users(id),
+  images_json jsonb NOT NULL DEFAULT '[]'::jsonb,
   UNIQUE (project_id, stage_no)
 );
 

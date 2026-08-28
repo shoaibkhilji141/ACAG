@@ -9,24 +9,34 @@ class StitchRouteArgs {
     required this.project,
     this.stageNo,
     this.photoPath,
+    this.photoPaths = const [],
     this.description,
   });
 
   final ProjectModel project;
   final int? stageNo;
   final String? photoPath;
+  final List<String> photoPaths;
   final String? description;
+
+  List<String> get effectivePhotoPaths {
+    if (photoPaths.isNotEmpty) return photoPaths;
+    if (photoPath != null && photoPath!.isNotEmpty) return [photoPath!];
+    return const [];
+  }
 
   StitchRouteArgs copyWith({
     ProjectModel? project,
     int? stageNo,
     String? photoPath,
+    List<String>? photoPaths,
     String? description,
   }) {
     return StitchRouteArgs(
       project: project ?? this.project,
       stageNo: stageNo ?? this.stageNo,
       photoPath: photoPath ?? this.photoPath,
+      photoPaths: photoPaths ?? this.photoPaths,
       description: description ?? this.description,
     );
   }

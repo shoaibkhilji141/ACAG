@@ -19,9 +19,11 @@ class PhotoUploadScreen extends StatefulWidget {
 }
 
 class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
+  static const _maxPhotos = 10;
+
   final _descriptionController = TextEditingController();
   final _picker = ImagePicker();
-  File? _photoFile;
+  final List<File> _photoFiles = [];
 
   int get _stageNo => stitchArgsFromRoute(context).stageNo ?? 1;
 
@@ -33,23 +35,60 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
     super.dispose();
   }
 
-  Future<void> _pick(ImageSource source) async {
+  Future<void> _pickCamera() async {
+    if (_photoFiles.length >= _maxPhotos) {
+      _showLimitSnack();
+      return;
+    }
     final picked = await _picker.pickImage(
-      source: source,
+      source: ImageSource.camera,
       maxWidth: 1280,
       imageQuality: 75,
     );
     if (picked == null) return;
-    setState(() => _photoFile = File(picked.path));
+    setState(() => _photoFiles.add(File(picked.path)));
+  }
+
+  Future<void> _pickGallery() async {
+    if (_photoFiles.length >= _maxPhotos) {
+      _showLimitSnack();
+      return;
+    }
+    final remaining = _maxPhotos - _photoFiles.length;
+    final picked = await _picker.pickMultiImage(
+      maxWidth: 1280,
+      imageQuality: 75,
+      limit: remaining,
+    );
+    if (picked.isEmpty) return;
+    setState(() {
+      for (final item in picked) {
+        if (_photoFiles.length >= _maxPhotos) break;
+        _photoFiles.add(File(item.path));
+      }
+    });
+  }
+
+  void _removePhoto(int index) {
+    setState(() => _photoFiles.removeAt(index));
+  }
+
+  void _showLimitSnack() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('You can add up to $_maxPhotos photos per stage.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _submit(BuildContext context) {
     final args = stitchArgsFromRoute(context);
 
-    if (_photoFile == null) {
+    if (_photoFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please take or select a progress photo first.'),
+          content: Text('Please add at least one progress photo.'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -60,7 +99,7 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
       AppRoutes.stitchQualityAssessment,
       arguments: args.copyWith(
         stageNo: _stageNo,
-        photoPath: _photoFile!.path,
+        photoPaths: _photoFiles.map((f) => f.path).toList(),
         description: _descriptionController.text.trim(),
       ),
     );
@@ -70,7 +109,7 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
   Widget build(BuildContext context) {
     final screen = stitchScreens[10];
     final theme = Theme.of(context);
-    final hasPhoto = _photoFile != null;
+    final hasPhotos = _photoFiles.isNotEmpty;
 
     return StitchFlowScaffold(
       screen: screen,
@@ -89,7 +128,7 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Current stage: $_stageName — GPS verification enabled.',
+            'Current stage: $_stageName — add one or more photos.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: AppColors.onSurfaceVariant,
             ),
@@ -101,7 +140,7 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
                 child: _PhotoActionButton(
                   icon: Icons.camera_alt_outlined,
                   label: 'Take Photo',
-                  onTap: () => _pick(ImageSource.camera),
+                  onTap: _pickCamera,
                 ),
               ),
               const SizedBox(width: 12),
@@ -109,73 +148,91 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
                 child: _PhotoActionButton(
                   icon: Icons.photo_library_outlined,
                   label: 'From Gallery',
-                  onTap: () => _pick(ImageSource.gallery),
+                  onTap: _pickGallery,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          FluentCard(
-            padding: const EdgeInsets.all(0),
-            child: Container(
-              height: 160,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: hasPhoto
-                    ? AppColors.surfaceLow
-                    : AppColors.surfaceContainer.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(12),
+          const SizedBox(height: 12),
+          if (hasPhotos)
+            Text(
+              '${_photoFiles.length} photo${_photoFiles.length == 1 ? '' : 's'} selected (max $_maxPhotos)',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w600,
               ),
-              clipBehavior: Clip.antiAlias,
-              child: hasPhoto
-                  ? Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Image.file(_photoFile!, fit: BoxFit.cover),
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.location_on,
-                                  color: Colors.white,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'GPS Verified',
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
+            )
+          else
+            Text(
+              'No photos selected yet',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          const SizedBox(height: 10),
+          if (hasPhotos)
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _photoFiles.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemBuilder: (context, index) {
+                final file = _photoFiles[index];
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.file(file, fit: BoxFit.cover),
+                    ),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Material(
+                        color: Colors.black54,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => _removePhoto(index),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.close,
+                              size: 14,
+                              color: Colors.white,
                             ),
                           ),
                         ),
-                      ],
-                    )
-                  : Center(
-                      child: Text(
-                        'No photo selected',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: AppColors.onSurfaceVariant,
-                        ),
                       ),
                     ),
+                  ],
+                );
+              },
+            )
+          else
+            FluentCard(
+              padding: const EdgeInsets.all(0),
+              child: Container(
+                height: 140,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    'Tap Take Photo or From Gallery',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
           const SizedBox(height: 16),
           TextField(
             controller: _descriptionController,

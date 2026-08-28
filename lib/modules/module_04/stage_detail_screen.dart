@@ -18,6 +18,7 @@ class StageDetailScreen extends StatefulWidget {
 
 class _StageDetailScreenState extends State<StageDetailScreen> {
   Map<String, dynamic>? _stage;
+  List<String> _images = [];
   bool _loading = true;
 
   @override
@@ -42,6 +43,7 @@ class _StageDetailScreenState extends State<StageDetailScreen> {
       if (!mounted) return;
       setState(() {
         _stage = row;
+        _images = ProjectService.stageImagesFromRow(row);
         _loading = false;
       });
     } catch (_) {
@@ -56,6 +58,7 @@ class _StageDetailScreenState extends State<StageDetailScreen> {
     final stageNo = args.stageNo ?? 0;
     final theme = Theme.of(context);
     final stageName = ConstructionStages.nameFor(stageNo);
+    final description = (_stage?['description'] as String?)?.trim() ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -100,26 +103,53 @@ class _StageDetailScreenState extends State<StageDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      GestureDetector(
-                        onTap: () => showBase64ImagePreview(
-                          context,
-                          imageBase64:
-                              _stage!['image_base64'] as String?,
-                          caption: _stage!['description'] as String?,
-                        ),
-                        child: FluentCard(
-                          padding: EdgeInsets.zero,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: AspectRatio(
-                              aspectRatio: 4 / 3,
-                              child: _buildImage(
-                                _stage!['image_base64'] as String?,
-                              ),
-                            ),
-                          ),
+                      Text(
+                        'Photos (${_images.length})',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
+                      const SizedBox(height: 10),
+                      if (_images.isEmpty)
+                        FluentCard(
+                          child: Text(
+                            'No photos saved for this stage.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        )
+                      else
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _images.length,
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                          ),
+                          itemBuilder: (context, index) {
+                            final base64 = _images[index];
+                            return GestureDetector(
+                              onTap: () => showBase64ImagePreview(
+                                context,
+                                imageBase64: base64,
+                                caption: description.isEmpty
+                                    ? 'Photo ${index + 1}'
+                                    : description,
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: AspectRatio(
+                                  aspectRatio: 1,
+                                  child: _buildImage(base64),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       const SizedBox(height: 16),
                       Text(
                         'Description',
@@ -131,9 +161,8 @@ class _StageDetailScreenState extends State<StageDetailScreen> {
                       FluentCard(
                         padding: const EdgeInsets.all(14),
                         child: Text(
-                          (_stage!['description'] as String?)?.trim().isNotEmpty ==
-                                  true
-                              ? (_stage!['description'] as String).trim()
+                          description.isNotEmpty
+                              ? description
                               : 'No description provided.',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: AppColors.onSurfaceVariant,

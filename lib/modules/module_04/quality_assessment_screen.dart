@@ -48,21 +48,24 @@ class _QualityAssessmentScreenState extends State<QualityAssessmentScreen> {
     final screen = stitchScreens[11];
     final args = stitchArgsFromRoute(context);
     final stageNo = args.stageNo;
-    final photoPath = args.photoPath;
+    final photoPaths = args.effectivePhotoPaths;
 
-    if (stageNo == null || photoPath == null) {
+    if (stageNo == null || photoPaths.isEmpty) {
       await navigateStitchNext(context, screen);
       return;
     }
 
     setState(() => _saving = true);
     try {
-      final base64 = await encodeFileToBase64(File(photoPath));
+      final base64List = <String>[];
+      for (final path in photoPaths) {
+        base64List.add(await encodeFileToBase64(File(path)));
+      }
       await ProjectService.saveConstructionStage(
         projectCodeOrId: args.project.id,
         stageNo: stageNo,
         stageName: ConstructionStages.nameFor(stageNo),
-        imageBase64: base64,
+        imageBase64List: base64List,
         description: args.description ?? '',
       );
     } catch (e) {

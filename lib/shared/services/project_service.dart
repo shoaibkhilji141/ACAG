@@ -832,11 +832,16 @@ class ProjectService {
     required String projectCodeOrId,
     required int stageNo,
     required String stageName,
-    required String imageBase64,
+    required List<String> imageBase64List,
     required String description,
   }) async {
+    if (imageBase64List.isEmpty) {
+      throw Exception('At least one progress photo is required.');
+    }
+
     final uuid = await _requireUuid(projectCodeOrId);
     final now = DateTime.now().toIso8601String();
+    final primaryImage = imageBase64List.first;
 
     try {
       await _client.from('module04_construction_stages').upsert(
@@ -844,7 +849,8 @@ class ProjectService {
           'project_id': uuid,
           'stage_no': stageNo,
           'stage_name': stageName,
-          'image_base64': imageBase64,
+          'image_base64': primaryImage,
+          'images_json': imageBase64List,
           'description': description,
           'completed_at': now,
           'completed_by': _userId,
@@ -861,15 +867,20 @@ class ProjectService {
       rethrow;
     }
 
-    final caption = description.trim().isEmpty
+    final baseCaption = description.trim().isEmpty
         ? '$stageName — progress photo'
         : '$stageName — $description';
 
-    await addProjectImageBase64(
-      projectCodeOrId: projectCodeOrId,
-      imageBase64: imageBase64,
-      caption: caption,
-    );
+    for (var i = 0; i < imageBase64List.length; i++) {
+      final suffix = imageBase64List.length > 1
+          ? ' (${i + 1}/${imageBase64List.length})'
+          : '';
+      await addProjectImageBase64(
+        projectCodeOrId: projectCodeOrId,
+        imageBase64: imageBase64List[i],
+        caption: '$baseCaption$suffix',
+      );
+    }
 
     if (stageNo >= ConstructionStages.total) {
       await completeModule(projectCodeOrId: projectCodeOrId, moduleNo: 4);
@@ -877,6 +888,20 @@ class ProjectService {
       moduleCompletionVersion.value++;
       invalidateProjectCache(projectCodeOrId);
     }
+  }
+
+  static List<String> stageImagesFromRow(Map<String, dynamic>? row) {
+    if (row == null) return [];
+    final json = row['images_json'];
+    if (json is List && json.isNotEmpty) {
+      return json
+          .map((e) => e?.toString() ?? '')
+          .where((s) => s.trim().isNotEmpty)
+          .toList();
+    }
+    final single = row['image_base64'] as String?;
+    if (single != null && single.trim().isNotEmpty) return [single];
+    return [];
   }
 
   static Future<String?> getOwnerPhone(String projectCodeOrId) async {
