@@ -8,6 +8,7 @@ import '../../shared/services/auth_service.dart';
 import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/mock_data.dart';
 import '../../shared/widgets/app_card.dart';
+import '../../shared/widgets/edit_profile_sheet.dart';
 import '../../shared/widgets/section_header.dart';
 import '../../theme/app_theme.dart';
 
@@ -21,6 +22,8 @@ class OwnerProfileScreen extends StatefulWidget {
 class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   final _picker = ImagePicker();
   String? _name;
+  String? _phone;
+  String? _email;
   String? _location;
   String? _imageUrl;
   File? _localImage;
@@ -37,6 +40,10 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     if (!mounted) return;
     setState(() {
       _name = profile?['full_name'] as String? ?? MockData.ownerName;
+      _phone = profile?['phone'] as String? ?? MockData.ownerPhone;
+      _email = profile?['email'] as String? ??
+          AuthService.client.auth.currentUser?.email ??
+          AppConstants.ownerEmail;
       _location =
           profile?['location_text'] as String? ?? MockData.ownerLocation;
       _imageUrl = profile?['profile_image_base64'] as String? ??
@@ -81,11 +88,29 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     }
   }
 
+  Future<void> _editProfile() async {
+    final saved = await showEditProfileSheet(
+      context,
+      name: _name ?? MockData.ownerName,
+      phone: _phone ?? MockData.ownerPhone,
+      location: _location ?? MockData.ownerLocation,
+    );
+    if (saved == true && mounted) {
+      await _loadProfile();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile updated')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final project = MockData.primaryProject;
     final displayName = _name ?? MockData.ownerName;
+    final displayPhone = _phone ?? MockData.ownerPhone;
+    final displayEmail = _email ?? AppConstants.ownerEmail;
     final displayLocation = _location ?? MockData.ownerLocation;
     final initials = displayName
         .split(' ')
@@ -154,16 +179,30 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                       ),
                     ],
                   ),
-                  TextButton.icon(
-                    onPressed: _uploading ? null : _pickImage,
-                    icon: const Icon(Icons.photo_library_outlined, size: 18),
-                    label: const Text('Change from Gallery'),
-                  ),
+                  const SizedBox(height: 12),
                   Text(
                     displayName,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.phone_outlined,
+                        size: 14,
+                        color: AppColors.outline,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        displayPhone,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -200,6 +239,21 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: SectionHeader(title: 'Account'),
+            ),
+            const SizedBox(height: 12),
+            FluentCard(
+              padding: EdgeInsets.zero,
+              child: ListTile(
+                leading: const Icon(Icons.person_outline, color: AppColors.primary),
+                title: const Text('Edit Profile'),
+                trailing: const Icon(Icons.chevron_right, color: AppColors.outline),
+                onTap: _editProfile,
               ),
             ),
             const SizedBox(height: 20),
@@ -249,13 +303,13 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                   _ProfileField(
                     icon: Icons.email_outlined,
                     label: 'Email',
-                    value: AppConstants.ownerEmail,
+                    value: displayEmail,
                   ),
                   const Divider(height: 24),
                   _ProfileField(
                     icon: Icons.phone_outlined,
                     label: 'Phone',
-                    value: '+92 300 1234567',
+                    value: displayPhone,
                   ),
                 ],
               ),

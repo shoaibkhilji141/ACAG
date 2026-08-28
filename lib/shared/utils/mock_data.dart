@@ -3,8 +3,10 @@ import '../models/models.dart';
 class MockData {
   static const engineerName = 'Shoaib Khilji';
   static const engineerLocation = 'Lahore, Punjab';
+  static const engineerPhone = '+923001112233';
   static const ownerName = 'Ali Raza';
   static const ownerLocation = 'Raiwind Road, Lahore';
+  static const ownerPhone = '+923001234567';
 
   static const kpis = (
     assigned: 1,
@@ -21,6 +23,7 @@ class MockData {
       address: 'Johar Town, Block A',
       city: 'Lahore',
       ownerName: 'Ali Raza',
+      ownerPhone: '+923001234567',
       engineerName: 'Shoaib Khilji',
       progress: 0.0,
       status: ProjectStatus.inProgress,

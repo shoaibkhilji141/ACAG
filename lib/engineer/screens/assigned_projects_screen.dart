@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/constants/app_constants.dart';
 import '../../shared/models/models.dart';
-import '../../shared/utils/mock_data.dart';
+import '../../shared/services/project_service.dart';
 import '../../shared/widgets/acag_app_bar.dart';
 import '../../shared/widgets/project_list_tile.dart';
 import '../../theme/app_theme.dart';
@@ -18,6 +18,8 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
   final _searchController = TextEditingController();
   String _query = '';
   ProjectStatus? _filter;
+  List<ProjectModel> _projects = [];
+  bool _loading = true;
 
   static const _filters = <(String, ProjectStatus?)>[
     ('All', null),
@@ -27,28 +29,51 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    final cached = ProjectService.cachedAssignedProjects;
+    if (cached != null) {
+      _projects = cached;
+      _loading = false;
+    }
+    _loadProjects();
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 
+  Future<void> _loadProjects() async {
+    final projects = await ProjectService.listAssignedProjects();
+    if (!mounted) return;
+    setState(() {
+      _projects = projects;
+      _loading = false;
+    });
+  }
+
   List<ProjectModel> get _filteredProjects {
-    return MockData.projects.where((p) {
+    return _projects.where((p) {
       final matchesFilter = _filter == null || p.status == _filter;
       final q = _query.toLowerCase();
       final matchesSearch = q.isEmpty ||
           p.title.toLowerCase().contains(q) ||
           p.address.toLowerCase().contains(q) ||
-          p.ownerName.toLowerCase().contains(q);
+          p.ownerName.toLowerCase().contains(q) ||
+          p.id.toLowerCase().contains(q);
       return matchesFilter && matchesSearch;
     }).toList();
   }
 
-  void _openProject(ProjectModel project) {
-    Navigator.of(context).pushNamed(
+  Future<void> _openProject(ProjectModel project) async {
+    ProjectService.prefetchDetails(project.id);
+    await Navigator.of(context).pushNamed(
       AppRoutes.engineerProjectDetails,
       arguments: project,
     );
+    if (mounted) await _loadProjects();
   }
 
   @override
@@ -125,36 +150,42 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: projects.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.search_off_outlined,
-                          size: 48,
-                          color: AppColors.outline.withValues(alpha: 0.5),
+            child: _loading && projects.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : projects.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.search_off_outlined,
+                              size: 48,
+                              color: AppColors.outline.withValues(alpha: 0.5),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No projects found',
+                              style: theme.textTheme.titleMedium,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No projects found',
-                          style: theme.textTheme.titleMedium,
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _loadProjects,
+                        child: ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          itemCount: projects.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final project = projects[index];
+                            return ProjectListTile(
+                              project: project,
+                              onTap: () => _openProject(project),
+                            );
+                          },
                         ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    itemCount: projects.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final project = projects[index];
-                      return ProjectListTile(
-                        project: project,
-                        onTap: () => _openProject(project),
-                      );
-                    },
-                  ),
+                      ),
           ),
         ],
       ),

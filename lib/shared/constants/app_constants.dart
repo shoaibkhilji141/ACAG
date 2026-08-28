@@ -55,6 +55,7 @@ class AppRoutes {
   static const stitchStructuralFrameType = '/stitch/08-structural-frame-type';
   static const stitchMaterialEstimation = '/stitch/09-material-estimation';
   static const stitchStageTimeline = '/stitch/10-stage-timeline';
+  static const stitchStageDetail = '/stitch/04-stage-detail';
   static const stitchPhotoUpload = '/stitch/11-photo-upload';
   static const stitchQualityAssessment = '/stitch/12-quality-assessment';
   static const stitchProjectHandover = '/stitch/13-project-handover';

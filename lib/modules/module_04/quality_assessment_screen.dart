@@ -1,7 +1,13 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/material.dart';
+
+import '../../shared/constants/app_constants.dart';
+import '../../shared/constants/construction_stages.dart';
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/project_service.dart';
+import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
@@ -26,6 +32,7 @@ class _QualityAssessmentScreenState extends State<QualityAssessmentScreen> {
   ];
 
   static const _score = 82;
+  bool _saving = false;
 
   void _toggleItem(int index) {
     setState(() {
@@ -34,6 +41,52 @@ class _QualityAssessmentScreenState extends State<QualityAssessmentScreen> {
         label: item.label,
         passed: item.passed == true ? false : true,
       );
+    });
+  }
+
+  Future<void> _complete(BuildContext context) async {
+    final screen = stitchScreens[11];
+    final args = stitchArgsFromRoute(context);
+    final stageNo = args.stageNo;
+    final photoPath = args.photoPath;
+
+    if (stageNo == null || photoPath == null) {
+      await navigateStitchNext(context, screen);
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final base64 = await encodeFileToBase64(File(photoPath));
+      await ProjectService.saveConstructionStage(
+        projectCodeOrId: args.project.id,
+        stageNo: stageNo,
+        stageName: ConstructionStages.nameFor(stageNo),
+        imageBase64: base64,
+        description: args.description ?? '',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _saving = false);
+
+    final navigator = Navigator.of(context);
+    navigator.popUntil((route) {
+      final name = route.settings.name;
+      return name == AppRoutes.engineerProjectDetails ||
+          name == AppRoutes.ownerShell ||
+          name == AppRoutes.engineerShell ||
+          route.isFirst;
     });
   }
 
@@ -47,8 +100,8 @@ class _QualityAssessmentScreenState extends State<QualityAssessmentScreen> {
       screen: screen,
       moduleDescription:
           'AI-assisted quality assessment based on uploaded progress photos.',
-      bottomLabel: 'Complete Quality Review',
-      onBottomPressed: () => navigateStitchNext(context, screen),
+      bottomLabel: _saving ? 'Saving…' : 'Complete',
+      onBottomPressed: _saving ? null : () => _complete(context),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

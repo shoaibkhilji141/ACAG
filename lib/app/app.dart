@@ -32,6 +32,7 @@ import '../modules/module_02/generated_foundation_drawing_screen.dart';
 import '../modules/module_02/structural_frame_type_screen.dart';
 import '../modules/module_03/material_estimation_screen.dart';
 import '../modules/module_04/stage_timeline_screen.dart';
+import '../modules/module_04/stage_detail_screen.dart';
 import '../modules/module_04/photo_upload_screen.dart';
 import '../modules/module_04/quality_assessment_screen.dart';
 import '../modules/module_05/project_handover_screen.dart';
@@ -87,6 +88,7 @@ class AcagApp extends StatelessWidget {
         AppRoutes.stitchMaterialEstimation: (_) =>
             const MaterialEstimationScreen(),
         AppRoutes.stitchStageTimeline: (_) => const StageTimelineScreen(),
+        AppRoutes.stitchStageDetail: (_) => const StageDetailScreen(),
         AppRoutes.stitchPhotoUpload: (_) => const PhotoUploadScreen(),
         AppRoutes.stitchQualityAssessment: (_) =>
             const QualityAssessmentScreen(),

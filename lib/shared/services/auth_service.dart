@@ -28,7 +28,7 @@ class AuthService {
     final profile = await client
         .from('profiles')
         .select(
-          'role, full_name, location_text, city, profile_image_base64, profile_image_url',
+          'role, full_name, phone, location_text, city, profile_image_base64, profile_image_url',
         )
         .eq('id', userId)
         .maybeSingle();
@@ -105,5 +105,31 @@ class AuthService {
     }
 
     return base64;
+  }
+
+  static Future<void> updateProfile({
+    required String fullName,
+    required String phone,
+    required String locationText,
+  }) async {
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) {
+      throw Exception('Please login again to update your profile.');
+    }
+
+    final updated = await client
+        .from('profiles')
+        .update({
+          'full_name': fullName.trim(),
+          'phone': phone.trim(),
+          'location_text': locationText.trim(),
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', userId)
+        .select('id');
+
+    if ((updated as List).isEmpty) {
+      throw Exception('Could not update profile.');
+    }
   }
 }

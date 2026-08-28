@@ -23,6 +23,12 @@ class EngineerShell extends StatefulWidget {
 class _EngineerShellState extends State<EngineerShell> {
   int _currentIndex = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    ProjectService.listAssignedProjects();
+  }
+
   void _onNavTap(int index) {
     if (index == 2) return; // Camera FAB slot
     setState(() => _currentIndex = index);

@@ -5,13 +5,17 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../shared/constants/app_constants.dart';
 import '../../shared/constants/construction_modules.dart';
+import '../../shared/models/project_details_bundle.dart';
 import '../../shared/models/models.dart';
 import '../../shared/services/map_launch_service.dart';
+import '../../shared/services/phone_launch_service.dart';
 import '../../shared/services/project_service.dart';
 import '../../shared/services/share_download_service.dart';
 import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/mock_data.dart';
+import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
+import '../../shared/widgets/image_preview_dialog.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../theme/app_theme.dart';
 
@@ -24,10 +28,12 @@ class ProjectDetailsScreen extends StatefulWidget {
 
 class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
   int _selectedTab = 0;
+  ProjectModel? _project;
   Map<int, bool> _moduleDone = {};
   List<Map<String, dynamic>> _images = [];
   List<MaterialLine> _materials = [];
   Map<String, dynamic>? _plot;
+  String? _ownerPhone;
   bool _loadingMeta = true;
 
   static const _progressSteps = [
@@ -38,10 +44,13 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
     _ProgressStep('Finishing'),
   ];
 
-  ProjectModel get _project {
+  ProjectModel get _routeProject {
     final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is StitchRouteArgs) return args.project;
     return args is ProjectModel ? args : MockData.primaryProject;
   }
+
+  ProjectModel get _currentProject => _project ?? _routeProject;
 
   List<String> get _tabs => [
         'Details',
@@ -58,7 +67,26 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
   void initState() {
     super.initState();
     ProjectService.moduleCompletionVersion.addListener(_onModuleCompletion);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshMeta());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final code = _routeProject.id;
+      final cached = ProjectService.getCachedBundle(code);
+      if (cached != null) {
+        _applyBundle(cached, showLoading: false);
+      }
+      _refreshMeta(silent: cached != null);
+    });
+  }
+
+  void _applyBundle(ProjectDetailsBundle bundle, {required bool showLoading}) {
+    setState(() {
+      _project = bundle.project;
+      _moduleDone = bundle.moduleDone;
+      _images = bundle.images;
+      _materials = bundle.materials;
+      _plot = bundle.plot;
+      _ownerPhone = bundle.ownerPhone ?? bundle.project.ownerPhone;
+      _loadingMeta = showLoading;
+    });
   }
 
   @override
@@ -71,22 +99,18 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
     if (mounted) _refreshMeta();
   }
 
-  Future<void> _refreshMeta() async {
-    final project = _project;
-    setState(() => _loadingMeta = true);
+  Future<void> _refreshMeta({bool silent = false}) async {
+    final fallback = _routeProject;
+    if (!silent) {
+      setState(() => _loadingMeta = true);
+    }
     try {
-      final done = await ProjectService.getModuleCompletionMap(project.id);
-      final images = await ProjectService.listProjectImages(project.id);
-      final materials = await ProjectService.getMaterialLines(project.id);
-      final plot = await ProjectService.getPlotDimensions(project.id);
+      final bundle = await ProjectService.fetchDetailsBundle(
+        fallback.id,
+        fallbackProject: fallback,
+      );
       if (!mounted) return;
-      setState(() {
-        _moduleDone = done;
-        _images = images;
-        _materials = materials;
-        _plot = plot;
-        _loadingMeta = false;
-      });
+      _applyBundle(bundle, showLoading: false);
     } catch (_) {
       if (!mounted) return;
       setState(() => _loadingMeta = false);
@@ -94,7 +118,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
   }
 
   Future<void> _shareProject() async {
-    await ShareDownloadService.shareProjectDetails(_project);
+    await ShareDownloadService.shareProjectDetails(_currentProject);
   }
 
   Future<void> _captureProjectImage() async {
@@ -131,7 +155,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
     try {
       final base64 = await encodeFileToBase64(File(picked.path));
       await ProjectService.addProjectImageBase64(
-        projectCodeOrId: _project.id,
+        projectCodeOrId: _currentProject.id,
         imageBase64: base64,
         caption: 'Project photo',
       );
@@ -155,14 +179,39 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
   Future<void> _openModule(ConstructionModuleInfo module) async {
     await Navigator.of(context).pushNamed(
       module.firstScreenRoute,
-      arguments: _project,
+      arguments: StitchRouteArgs(project: _currentProject),
     );
     if (mounted) await _refreshMeta();
   }
 
+  Future<void> _contactOwner() async {
+    final phone = _ownerPhone ?? _currentProject.ownerPhone;
+    if (phone == null || phone.trim().isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Owner phone number is not available.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+    try {
+      await PhoneLaunchService.dial(phone);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
   Future<void> _viewOnMap() async {
     try {
-      await MapLaunchService.openProjectLocation(_project);
+      await MapLaunchService.openProjectLocation(_currentProject);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -177,7 +226,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final project = _project;
+    final project = _currentProject;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -210,7 +259,11 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _ProjectHero(project: project),
+                    _ProjectHero(
+                      project: project,
+                      ownerPhone: _ownerPhone,
+                      onContactOwner: _contactOwner,
+                    ),
                     const SizedBox(height: 20),
                     _ProgressOverview(
                       phase: _modulePhase,
@@ -351,6 +404,8 @@ class _ImagesTab extends StatelessWidget {
       );
     }
 
+    final theme = Theme.of(context);
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -361,15 +416,47 @@ class _ImagesTab extends StatelessWidget {
         mainAxisSpacing: 10,
       ),
       itemBuilder: (context, index) {
-        final bytes = decodeBase64Image(images[index]['image_base64'] as String?);
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: bytes == null
-              ? Container(
-                  color: AppColors.surfaceContainer,
-                  child: const Icon(Icons.broken_image_outlined),
-                )
-              : Image.memory(bytes, fit: BoxFit.cover),
+        final image = images[index];
+        final bytes = decodeBase64Image(image['image_base64'] as String?);
+        final caption = image['caption'] as String?;
+        return GestureDetector(
+          onTap: () => showBase64ImagePreview(
+            context,
+            imageBase64: image['image_base64'] as String?,
+            caption: caption,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: bytes == null
+                ? Container(
+                    color: AppColors.surfaceContainer,
+                    child: const Icon(Icons.broken_image_outlined),
+                  )
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.memory(bytes, fit: BoxFit.cover),
+                      if (caption != null && caption.trim().isNotEmpty)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            color: Colors.black54,
+                            child: Text(
+                              caption,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
         );
       },
     );
@@ -377,9 +464,15 @@ class _ImagesTab extends StatelessWidget {
 }
 
 class _ProjectHero extends StatelessWidget {
-  const _ProjectHero({required this.project});
+  const _ProjectHero({
+    required this.project,
+    this.ownerPhone,
+    required this.onContactOwner,
+  });
 
   final ProjectModel project;
+  final String? ownerPhone;
+  final VoidCallback onContactOwner;
 
   @override
   Widget build(BuildContext context) {
@@ -468,7 +561,7 @@ class _ProjectHero extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: () {},
+          onPressed: onContactOwner,
           icon: const Icon(Icons.phone_outlined, size: 18),
           label: const Text('Contact Owner'),
           style: OutlinedButton.styleFrom(

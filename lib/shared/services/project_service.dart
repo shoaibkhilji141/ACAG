@@ -1,20 +1,12 @@
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../constants/construction_stages.dart';
 import '../models/models.dart';
+import '../models/project_details_bundle.dart';
 import '../utils/mock_data.dart';
-
-class MaterialLine {
-  const MaterialLine({
-    required this.name,
-    required this.unit,
-    required this.qty,
-  });
-
-  final String name;
-  final String unit;
-  final String qty;
-}
+import '../utils/project_route.dart';
 
 class ProjectService {
   ProjectService._();
@@ -26,13 +18,46 @@ class ProjectService {
 
   static String? get _userId => _client.auth.currentUser?.id;
 
+  static final Map<String, String> _uuidCache = {};
+  static final Map<String, ProjectDetailsBundle> _bundleCache = {};
+  static List<ProjectModel>? _assignedProjectsCache;
+
+  static List<ProjectModel>? get cachedAssignedProjects => _assignedProjectsCache;
+
+  static ProjectDetailsBundle? getCachedBundle(String projectCode) =>
+      _bundleCache[projectCode];
+
+  static void prefetchDetails(String projectCode) {
+    fetchDetailsBundle(projectCode);
+  }
+
+  static void invalidateProjectCache([String? projectCode]) {
+    if (projectCode != null) {
+      _bundleCache.remove(projectCode);
+    } else {
+      _bundleCache.clear();
+    }
+    _assignedProjectsCache = null;
+  }
+
   static Future<String?> resolveProjectUuid(String projectCodeOrId) async {
-    final row = await _client
+    final cached = _uuidCache[projectCodeOrId];
+    if (cached != null) return cached;
+
+    var row = await _client
         .from('projects')
         .select('id')
         .eq('project_code', projectCodeOrId)
         .maybeSingle();
-    return row?['id'] as String?;
+    row ??= await _client
+        .from('projects')
+        .select('id')
+        .eq('id', projectCodeOrId)
+        .maybeSingle();
+
+    final uuid = row?['id'] as String?;
+    if (uuid != null) _uuidCache[projectCodeOrId] = uuid;
+    return uuid;
   }
 
   static Future<String> _requireUuid(String projectCodeOrId) async {
@@ -116,6 +141,256 @@ class ProjectService {
     }).eq('id', uuid);
 
     moduleCompletionVersion.value++;
+    invalidateProjectCache(projectCodeOrId);
+  }
+
+  static Future<List<ProjectModel>> listAssignedProjects() async {
+    try {
+      var query = _client.from('projects').select();
+      final uid = _userId;
+      if (uid != null) {
+        query = query.eq('assigned_engineer_id', uid);
+      }
+      final rows = await query.order('updated_at', ascending: false);
+      final projects = (rows as List)
+          .map((r) => projectFromRow(Map<String, dynamic>.from(r as Map)))
+          .toList();
+      if (projects.isNotEmpty) {
+        _assignedProjectsCache = projects;
+        for (final p in projects) {
+          fetchDetailsBundle(p.id, fallbackProject: p);
+        }
+        return projects;
+      }
+
+      final demo = await _fetchProjectRow('ACAG-1');
+      if (demo != null) {
+        final project = projectFromRow(demo);
+        _assignedProjectsCache = [project];
+        fetchDetailsBundle(project.id, fallbackProject: project);
+        return [project];
+      }
+    } catch (e) {
+      debugPrint('listAssignedProjects: $e');
+    }
+
+    _assignedProjectsCache = MockData.projects;
+    return MockData.projects;
+  }
+
+  static Future<Map<String, dynamic>?> _fetchProjectRow(String codeOrId) async {
+    var row = await _client
+        .from('projects')
+        .select()
+        .eq('project_code', codeOrId)
+        .maybeSingle();
+    row ??= await _client
+        .from('projects')
+        .select()
+        .eq('id', codeOrId)
+        .maybeSingle();
+    return row;
+  }
+
+  static String? _phoneFromRow(Map<String, dynamic> row) {
+    final phone = row['owner_phone'] as String?;
+    if (phone != null && phone.trim().isNotEmpty) return phone.trim();
+    return null;
+  }
+
+  static ProjectModel projectFromRow(Map<String, dynamic> row) {
+    final code = row['project_code'] as String? ?? row['id']?.toString() ?? '';
+    final progressPct = (row['progress_percent'] as num?)?.toDouble() ?? 0;
+    final statusRaw = (row['status'] as String?)?.toLowerCase() ?? 'in_progress';
+    final status = switch (statusRaw) {
+      'pending' => ProjectStatus.pending,
+      'completed' => ProjectStatus.completed,
+      'overdue' => ProjectStatus.overdue,
+      _ => ProjectStatus.inProgress,
+    };
+
+    var nextInspection = '—';
+    final nextRaw = row['next_inspection_at'];
+    if (nextRaw is String) {
+      final parsed = DateTime.tryParse(nextRaw);
+      if (parsed != null) {
+        nextInspection = DateFormat('dd MMM yyyy').format(parsed);
+      }
+    } else if (row['next_inspection'] is String) {
+      nextInspection = row['next_inspection'] as String;
+    }
+
+    return ProjectModel(
+      id: code,
+      title: row['title'] as String? ?? 'House #$code',
+      address: row['address'] as String? ??
+          row['address_line'] as String? ??
+          row['site_address'] as String? ??
+          '',
+      city: row['city'] as String? ?? '',
+      ownerName: row['owner_name'] as String? ?? 'Owner',
+      ownerPhone: _phoneFromRow(row),
+      engineerName: row['engineer_name'] as String? ?? 'Engineer',
+      progress: (progressPct / 100).clamp(0.0, 1.0),
+      status: status,
+      phase: row['current_phase'] as String? ?? 'Not started',
+      nextInspection: nextInspection,
+      lat: (row['lat'] as num?)?.toDouble() ??
+          (row['latitude'] as num?)?.toDouble() ??
+          31.5204,
+      lng: (row['lng'] as num?)?.toDouble() ??
+          (row['longitude'] as num?)?.toDouble() ??
+          74.3587,
+    );
+  }
+
+  static Future<ProjectDetailsBundle> fetchDetailsBundle(
+    String projectCodeOrId, {
+    ProjectModel? fallbackProject,
+  }) async {
+    final fallback = fallbackProject ?? MockData.primaryProject;
+
+    try {
+      final row = await _fetchProjectRow(projectCodeOrId);
+      if (row == null) {
+        return ProjectDetailsBundle(
+          project: fallback,
+          moduleDone: const {},
+          images: const [],
+          materials: const [],
+        );
+      }
+
+      final project = projectFromRow(row);
+      final code = project.id;
+      final uuid = row['id'] as String;
+      _uuidCache[code] = uuid;
+      _uuidCache[projectCodeOrId] = uuid;
+
+      final results = await Future.wait<dynamic>([
+        _moduleMapForUuid(uuid),
+        _imagesForUuid(uuid),
+        _materialLinesForUuid(uuid),
+        _plotForUuid(uuid),
+        _constructionStagesForUuid(uuid),
+      ]);
+
+      final bundle = ProjectDetailsBundle(
+        project: project,
+        moduleDone: results[0] as Map<int, bool>,
+        images: results[1] as List<Map<String, dynamic>>,
+        materials: results[2] as List<MaterialLine>,
+        plot: results[3] as Map<String, dynamic>?,
+        ownerPhone: _phoneFromRow(row) ?? project.ownerPhone,
+        constructionStages: results[4] as List<Map<String, dynamic>>,
+      );
+      _bundleCache[code] = bundle;
+      return bundle;
+    } catch (e) {
+      debugPrint('fetchDetailsBundle: $e');
+      return _bundleCache[projectCodeOrId] ??
+          ProjectDetailsBundle(
+            project: fallback,
+            moduleDone: const {},
+            images: const [],
+            materials: const [],
+          );
+    }
+  }
+
+  static Future<Map<int, bool>> _moduleMapForUuid(String uuid) async {
+    final rows = await _client
+        .from('project_modules')
+        .select('module_no, is_completed')
+        .eq('project_id', uuid);
+
+    final map = <int, bool>{};
+    for (final row in (rows as List)) {
+      final raw = row['module_no'];
+      final no = raw is num ? raw.toInt() : int.tryParse('$raw');
+      if (no == null) continue;
+      map[no] = row['is_completed'] == true;
+    }
+    return map;
+  }
+
+  static Future<List<Map<String, dynamic>>> _imagesForUuid(String uuid) async {
+    final rows = await _client
+        .from('project_images')
+        .select('id, image_base64, caption, created_at')
+        .eq('project_id', uuid)
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(rows as List);
+  }
+
+  static Future<List<MaterialLine>> _materialLinesForUuid(String uuid) async {
+    final row = await _client
+        .from('module03_material_estimates')
+        .select()
+        .eq('project_id', uuid)
+        .maybeSingle();
+    if (row == null) return [];
+
+    String fmt(num? n) {
+      if (n == null) return '0';
+      if (n == n.roundToDouble()) {
+        return n.round().toString().replaceAllMapped(
+              RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+              (m) => '${m[1]},',
+            );
+      }
+      return n.toStringAsFixed(1);
+    }
+
+    return [
+      MaterialLine(
+        name: 'Bricks',
+        unit: 'Nos.',
+        qty: fmt(row['bricks_qty'] as num?),
+      ),
+      MaterialLine(
+        name: 'Cement',
+        unit: 'Bags',
+        qty: fmt(row['cement_bags'] as num?),
+      ),
+      MaterialLine(
+        name: 'Steel (Sarya)',
+        unit: 'Tons',
+        qty: fmt(row['steel_tons'] as num?),
+      ),
+      MaterialLine(
+        name: 'Sand (Ravi)',
+        unit: 'Cft',
+        qty: fmt(row['sand_units'] as num?),
+      ),
+    ];
+  }
+
+  static Future<Map<String, dynamic>?> _plotForUuid(String uuid) async {
+    return await _client
+        .from('module01_plot_dimensions')
+        .select()
+        .eq('project_id', uuid)
+        .maybeSingle();
+  }
+
+  static Future<List<Map<String, dynamic>>> _constructionStagesForUuid(
+    String uuid,
+  ) async {
+    try {
+      final rows = await _client
+          .from('module04_construction_stages')
+          .select()
+          .eq('project_id', uuid)
+          .order('stage_no');
+      return List<Map<String, dynamic>>.from(rows as List);
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST205' ||
+          e.message.contains('module04_construction_stages')) {
+        return [];
+      }
+      rethrow;
+    }
   }
 
   static Future<List<Map<String, dynamic>>> listProjectImages(
@@ -145,6 +420,7 @@ class ProjectService {
       'caption': caption ?? 'Site photo',
       'uploaded_by': _userId,
     });
+    invalidateProjectCache(projectCodeOrId);
   }
 
   // ── Module 01 ──────────────────────────────────────────────
@@ -509,6 +785,108 @@ class ProjectService {
   }
 
   static ProjectModel projectFromRouteOrMock(Object? args) {
+    if (args is StitchRouteArgs) return args.project;
     return args is ProjectModel ? args : MockData.primaryProject;
+  }
+
+  // ── Module 04 — Construction Tracking ─────────────────────
+
+  static Future<List<Map<String, dynamic>>> getConstructionStages(
+    String projectCodeOrId,
+  ) async {
+    final uuid = await resolveProjectUuid(projectCodeOrId);
+    if (uuid == null) return [];
+    return _constructionStagesForUuid(uuid);
+  }
+
+  static Future<Map<String, dynamic>?> getConstructionStage(
+    String projectCodeOrId,
+    int stageNo,
+  ) async {
+    final uuid = await resolveProjectUuid(projectCodeOrId);
+    if (uuid == null) return null;
+
+    try {
+      return await _client
+          .from('module04_construction_stages')
+          .select()
+          .eq('project_id', uuid)
+          .eq('stage_no', stageNo)
+          .maybeSingle();
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST205' ||
+          e.message.contains('module04_construction_stages')) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  static int completedConstructionStageCount(List<Map<String, dynamic>> rows) =>
+      rows.length;
+
+  static int nextConstructionStageNo(List<Map<String, dynamic>> rows) =>
+      completedConstructionStageCount(rows) + 1;
+
+  static Future<void> saveConstructionStage({
+    required String projectCodeOrId,
+    required int stageNo,
+    required String stageName,
+    required String imageBase64,
+    required String description,
+  }) async {
+    final uuid = await _requireUuid(projectCodeOrId);
+    final now = DateTime.now().toIso8601String();
+
+    try {
+      await _client.from('module04_construction_stages').upsert(
+        {
+          'project_id': uuid,
+          'stage_no': stageNo,
+          'stage_name': stageName,
+          'image_base64': imageBase64,
+          'description': description,
+          'completed_at': now,
+          'completed_by': _userId,
+        },
+        onConflict: 'project_id,stage_no',
+      );
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST205' ||
+          e.message.contains('module04_construction_stages')) {
+        throw Exception(
+          'Database table missing. Run supabase/migrations/20250828140000_module04_construction_stages.sql in Supabase SQL Editor.',
+        );
+      }
+      rethrow;
+    }
+
+    final caption = description.trim().isEmpty
+        ? '$stageName — progress photo'
+        : '$stageName — $description';
+
+    await addProjectImageBase64(
+      projectCodeOrId: projectCodeOrId,
+      imageBase64: imageBase64,
+      caption: caption,
+    );
+
+    if (stageNo >= ConstructionStages.total) {
+      await completeModule(projectCodeOrId: projectCodeOrId, moduleNo: 4);
+    } else {
+      moduleCompletionVersion.value++;
+      invalidateProjectCache(projectCodeOrId);
+    }
+  }
+
+  static Future<String?> getOwnerPhone(String projectCodeOrId) async {
+    final row = await _client
+        .from('projects')
+        .select('owner_phone')
+        .eq('project_code', projectCodeOrId)
+        .maybeSingle();
+    final phone = row?['owner_phone'] as String?;
+    if (phone != null && phone.trim().isNotEmpty) return phone.trim();
+    return null;
   }
 }

@@ -1,5 +1,17 @@
 enum ProjectStatus { pending, inProgress, completed, overdue }
 
+class MaterialLine {
+  const MaterialLine({
+    required this.name,
+    required this.unit,
+    required this.qty,
+  });
+
+  final String name;
+  final String unit;
+  final String qty;
+}
+
 class ProjectModel {
   const ProjectModel({
     required this.id,
@@ -12,6 +24,7 @@ class ProjectModel {
     required this.status,
     required this.phase,
     required this.nextInspection,
+    this.ownerPhone,
     this.imageUrl,
     this.lat = 31.5204,
     this.lng = 74.3587,
@@ -22,6 +35,7 @@ class ProjectModel {
   final String address;
   final String city;
   final String ownerName;
+  final String? ownerPhone;
   final String engineerName;
   final double progress;
   final ProjectStatus status;

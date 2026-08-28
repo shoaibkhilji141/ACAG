@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../shared/constants/app_constants.dart';
+import '../../shared/constants/construction_stages.dart';
 import '../../shared/constants/stitch_screens.dart';
-import '../../shared/services/project_service.dart';
-import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
@@ -22,7 +22,10 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
   final _descriptionController = TextEditingController();
   final _picker = ImagePicker();
   File? _photoFile;
-  bool _saving = false;
+
+  int get _stageNo => stitchArgsFromRoute(context).stageNo ?? 1;
+
+  String get _stageName => ConstructionStages.nameFor(_stageNo);
 
   @override
   void dispose() {
@@ -40,55 +43,41 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
     setState(() => _photoFile = File(picked.path));
   }
 
-  Future<void> _submit(BuildContext context) async {
-    final screen = stitchScreens[10];
-    final project = projectFromRoute(context);
+  void _submit(BuildContext context) {
+    final args = stitchArgsFromRoute(context);
 
-    if (_photoFile != null) {
-      setState(() => _saving = true);
-      try {
-        final base64 = await encodeFileToBase64(_photoFile!);
-        await ProjectService.addProjectImageBase64(
-          projectCodeOrId: project.id,
-          imageBase64: base64,
-          caption: _descriptionController.text.trim().isEmpty
-              ? 'Progress photo'
-              : _descriptionController.text.trim(),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(this.context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceFirst('Exception: ', '')),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return;
-      }
-      if (!mounted) return;
-      setState(() => _saving = false);
+    if (_photoFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please take or select a progress photo first.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
     }
 
-    if (!context.mounted) return;
-    await navigateStitchNext(context, screen);
+    Navigator.of(context).pushReplacementNamed(
+      AppRoutes.stitchQualityAssessment,
+      arguments: args.copyWith(
+        stageNo: _stageNo,
+        photoPath: _photoFile!.path,
+        description: _descriptionController.text.trim(),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final screen = stitchScreens[10];
     final theme = Theme.of(context);
-    projectFromRoute(context);
     final hasPhoto = _photoFile != null;
 
     return StitchFlowScaffold(
       screen: screen,
       moduleDescription:
           'Document on-site progress with geo-tagged photos for QA review.',
-      bottomLabel: _saving ? 'Saving…' : 'Submit Progress Update',
-      onBottomPressed: () {
-        if (!_saving) _submit(context);
-      },
+      bottomLabel: 'Next — Quality Assessment',
+      onBottomPressed: () => _submit(context),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -100,7 +89,7 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Current stage: Brickwork & Plaster — GPS verification enabled.',
+            'Current stage: $_stageName — GPS verification enabled.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: AppColors.onSurfaceVariant,
             ),

@@ -9,6 +9,7 @@ import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/mock_data.dart';
 import '../../shared/widgets/acag_app_bar.dart';
 import '../../shared/widgets/app_card.dart';
+import '../../shared/widgets/edit_profile_sheet.dart';
 import '../../theme/app_theme.dart';
 
 class EngineerProfileScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class EngineerProfileScreen extends StatefulWidget {
 class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
   final _picker = ImagePicker();
   String? _name;
+  String? _phone;
   String? _location;
   String? _imageUrl;
   File? _localImage;
@@ -37,6 +39,7 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
     if (!mounted) return;
     setState(() {
       _name = profile?['full_name'] as String? ?? MockData.engineerName;
+      _phone = profile?['phone'] as String? ?? MockData.engineerPhone;
       _location =
           profile?['location_text'] as String? ?? MockData.engineerLocation;
       _imageUrl = profile?['profile_image_base64'] as String? ??
@@ -81,6 +84,22 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
     }
   }
 
+  Future<void> _editProfile() async {
+    final saved = await showEditProfileSheet(
+      context,
+      name: _name ?? MockData.engineerName,
+      phone: _phone ?? MockData.engineerPhone,
+      location: _location ?? MockData.engineerLocation,
+    );
+    if (saved == true && mounted) {
+      await _loadProfile();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile updated')),
+      );
+    }
+  }
+
   void _logout(BuildContext context) {
     showDialog<void>(
       context: context,
@@ -117,6 +136,7 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final displayName = _name ?? MockData.engineerName;
+    final displayPhone = _phone ?? MockData.engineerPhone;
     final displayLocation = _location ?? MockData.engineerLocation;
     final initials = displayName
         .split(' ')
@@ -196,13 +216,7 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _uploading ? null : _pickImage,
-                    icon: const Icon(Icons.photo_library_outlined, size: 18),
-                    label: const Text('Change from Gallery'),
-                  ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Text(
                     displayName,
                     style: theme.textTheme.titleLarge?.copyWith(
@@ -226,6 +240,22 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.phone_outlined,
+                        size: 14,
+                        color: AppColors.outline,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        displayPhone,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Row(
@@ -293,7 +323,7 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
                   _SettingsTile(
                     icon: Icons.person_outline,
                     title: 'Edit Profile',
-                    onTap: _pickImage,
+                    onTap: _editProfile,
                   ),
                   _divider(),
                   _SettingsTile(
