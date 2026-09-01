@@ -104,10 +104,10 @@ const stitchScreens = <StitchScreenDef>[
   ),
   StitchScreenDef(
     number: 9,
-    title: 'Material Estimation & Costing',
+    title: 'Material Estimation',
     route: AppRoutes.stitchMaterialEstimation,
     moduleNumber: '03',
-    moduleTitle: 'Material Estimation & Costing',
+    moduleTitle: 'Material Estimation',
     stepInModule: 1,
     totalStepsInModule: 1,
   ),

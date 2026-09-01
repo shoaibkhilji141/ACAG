@@ -22,14 +22,8 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
   double _cement = 0;
   double _steel = 0;
   double _sand = 0;
-  double _bricksCost = 0;
-  double _cementCost = 0;
-  double _steelCost = 0;
-  double _sandCost = 0;
   double? _plotArea;
   int? _stories;
-
-  double get _total => _bricksCost + _cementCost + _steelCost + _sandCost;
 
   @override
   void initState() {
@@ -51,10 +45,6 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
         _cement = (saved['cement_bags'] as num?)?.toDouble() ?? 0;
         _steel = (saved['steel_tons'] as num?)?.toDouble() ?? 0;
         _sand = (saved['sand_units'] as num?)?.toDouble() ?? 0;
-        _bricksCost = (saved['bricks_cost'] as num?)?.toDouble() ?? 0;
-        _cementCost = (saved['cement_cost'] as num?)?.toDouble() ?? 0;
-        _steelCost = (saved['steel_cost'] as num?)?.toDouble() ?? 0;
-        _sandCost = (saved['sand_cost'] as num?)?.toDouble() ?? 0;
       } else if (_plotArea != null && _plotArea! > 0) {
         _computeFromPlot(_plotArea!, _stories ?? 1);
       }
@@ -69,10 +59,6 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
     _cement = (area * 0.18 * factor).roundToDouble();
     _steel = double.parse((area * 0.0009 * factor).toStringAsFixed(1));
     _sand = (area * 1.35 * factor).roundToDouble();
-    _bricksCost = _bricks * 14;
-    _cementCost = _cement * 1150;
-    _steelCost = _steel * 285000;
-    _sandCost = _sand * 85;
   }
 
   String _fmt(num n) {
@@ -105,11 +91,6 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
         cementBags: _cement,
         steelTons: _steel,
         sandUnits: _sand,
-        bricksCost: _bricksCost,
-        cementCost: _cementCost,
-        steelCost: _steelCost,
-        sandCost: _sandCost,
-        totalCost: _total,
         basedOnPlotArea: _plotArea,
         basedOnStories: _stories,
       );
@@ -134,16 +115,16 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
     final theme = Theme.of(context);
 
     final materials = [
-      (name: 'Bricks', unit: 'Nos.', qty: _fmt(_bricks), rate: '14', cost: _fmt(_bricksCost)),
-      (name: 'Cement', unit: 'Bags', qty: _fmt(_cement), rate: '1,150', cost: _fmt(_cementCost)),
-      (name: 'Steel (Sarya)', unit: 'Tons', qty: _fmt(_steel), rate: '285,000', cost: _fmt(_steelCost)),
-      (name: 'Sand (Ravi)', unit: 'Cft', qty: _fmt(_sand), rate: '85', cost: _fmt(_sandCost)),
+      (name: 'Bricks', unit: 'Nos.', qty: _fmt(_bricks)),
+      (name: 'Cement', unit: 'Bags', qty: _fmt(_cement)),
+      (name: 'Steel (Sarya)', unit: 'Tons', qty: _fmt(_steel)),
+      (name: 'Sand (Ravi)', unit: 'Cft', qty: _fmt(_sand)),
     ];
 
     return StitchFlowScaffold(
       screen: screen,
       moduleDescription:
-          'Estimated material quantities and costs for your approved structural design.',
+          'Estimated material quantities for your approved structural design.',
       bottomLabel: _saving ? 'Saving…' : 'Save Material Estimate',
       onBottomPressed: (_loading || _saving) ? null : _save,
       body: _loading
@@ -155,7 +136,7 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Material Estimation & Costing',
+                  'Material Estimation',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -201,26 +182,6 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
                             Expanded(
                               child: Text(
                                 'Qty',
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                'Rate',
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                'Cost',
                                 textAlign: TextAlign.end,
                                 style: theme.textTheme.labelMedium?.copyWith(
                                   fontWeight: FontWeight.w700,
@@ -276,22 +237,6 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
                               Expanded(
                                 child: Text(
                                   m.qty,
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.labelMedium,
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  m.rate,
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    color: AppColors.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  m.cost,
                                   textAlign: TextAlign.end,
                                   style: theme.textTheme.labelMedium?.copyWith(
                                     fontWeight: FontWeight.w700,
@@ -302,51 +247,6 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
                           ),
                         );
                       }),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                FluentCard(
-                  color: AppColors.primaryFixed.withValues(alpha: 0.2),
-                  border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.35),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Total Estimated Cost',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: AppColors.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _total > 0 ? 'PKR ${_fmt(_total)}' : '—',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.receipt_long_outlined,
-                          color: AppColors.primary,
-                          size: 28,
-                        ),
-                      ),
                     ],
                   ),
                 ),

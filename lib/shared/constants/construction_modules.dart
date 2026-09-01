@@ -50,7 +50,7 @@ const constructionModules = <ConstructionModuleInfo>[
   ConstructionModuleInfo(
     number: '03',
     title: 'Material Estimation',
-    subtitle: 'Material quantities & cost breakdown',
+    subtitle: 'Material quantity estimates',
     icon: Icons.inventory_2_outlined,
     route: AppRoutes.projectModule03,
     firstScreenRoute: AppRoutes.stitchMaterialEstimation,
