@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../../constants/app_constants.dart';
 import '../../constants/stitch_screens.dart';
+import '../../screens/module_completion_certificate_screen.dart';
 import '../../services/project_service.dart';
 import '../../utils/project_route.dart';
 import '../../widgets/primary_button.dart';
@@ -205,6 +206,7 @@ Future<void> navigateStitchNext(
   if (next == null) {
     final isModuleFinale = screen.stepInModule == screen.totalStepsInModule;
     final moduleNo = int.tryParse(screen.moduleNumber) ?? 0;
+    var moduleJustCompleted = false;
 
     if (isModuleFinale && moduleNo > 0) {
       try {
@@ -212,6 +214,7 @@ Future<void> navigateStitchNext(
           projectCodeOrId: project.id,
           moduleNo: moduleNo,
         );
+        moduleJustCompleted = true;
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -228,16 +231,27 @@ Future<void> navigateStitchNext(
 
     if (!context.mounted) return;
 
-    final navigator = Navigator.of(context);
-    navigator.popUntil((route) {
-      final name = route.settings.name;
-      return name == AppRoutes.engineerProjectDetails ||
-          name == AppRoutes.ownerShell ||
-          name == AppRoutes.engineerShell ||
-          route.isFirst;
-    });
+    if (moduleJustCompleted && moduleNo != 5) {
+      await showModuleCompletionCertificate(
+        context,
+        project: project,
+        moduleNo: moduleNo,
+      );
+    } else {
+      popToProjectHub(context);
+    }
     return;
   }
 
   await Navigator.of(context).pushReplacementNamed(next, arguments: project);
+}
+
+void popToProjectHub(BuildContext context) {
+  Navigator.of(context).popUntil((route) {
+    final name = route.settings.name;
+    return name == AppRoutes.engineerProjectDetails ||
+        name == AppRoutes.ownerShell ||
+        name == AppRoutes.engineerShell ||
+        route.isFirst;
+  });
 }

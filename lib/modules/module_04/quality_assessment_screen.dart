@@ -3,9 +3,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../shared/constants/app_constants.dart';
 import '../../shared/constants/construction_stages.dart';
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/screens/module_completion_certificate_screen.dart';
 import '../../shared/services/project_service.dart';
 import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/project_route.dart';
@@ -56,12 +56,13 @@ class _QualityAssessmentScreenState extends State<QualityAssessmentScreen> {
     }
 
     setState(() => _saving = true);
+    var moduleCompleted = false;
     try {
       final base64List = <String>[];
       for (final path in photoPaths) {
         base64List.add(await encodeFileToBase64(File(path)));
       }
-      await ProjectService.saveConstructionStage(
+      moduleCompleted = await ProjectService.saveConstructionStage(
         projectCodeOrId: args.project.id,
         stageNo: stageNo,
         stageName: ConstructionStages.nameFor(stageNo),
@@ -83,14 +84,15 @@ class _QualityAssessmentScreenState extends State<QualityAssessmentScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
 
-    final navigator = Navigator.of(context);
-    navigator.popUntil((route) {
-      final name = route.settings.name;
-      return name == AppRoutes.engineerProjectDetails ||
-          name == AppRoutes.ownerShell ||
-          name == AppRoutes.engineerShell ||
-          route.isFirst;
-    });
+    if (moduleCompleted) {
+      await showModuleCompletionCertificate(
+        context,
+        project: args.project,
+        moduleNo: 4,
+      );
+    } else {
+      popToProjectHub(context);
+    }
   }
 
   @override

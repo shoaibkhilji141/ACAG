@@ -8,6 +8,7 @@ class StitchRouteArgs {
   const StitchRouteArgs({
     required this.project,
     this.stageNo,
+    this.moduleNo,
     this.photoPath,
     this.photoPaths = const [],
     this.description,
@@ -15,6 +16,7 @@ class StitchRouteArgs {
 
   final ProjectModel project;
   final int? stageNo;
+  final int? moduleNo;
   final String? photoPath;
   final List<String> photoPaths;
   final String? description;
@@ -28,6 +30,7 @@ class StitchRouteArgs {
   StitchRouteArgs copyWith({
     ProjectModel? project,
     int? stageNo,
+    int? moduleNo,
     String? photoPath,
     List<String>? photoPaths,
     String? description,
@@ -35,6 +38,7 @@ class StitchRouteArgs {
     return StitchRouteArgs(
       project: project ?? this.project,
       stageNo: stageNo ?? this.stageNo,
+      moduleNo: moduleNo ?? this.moduleNo,
       photoPath: photoPath ?? this.photoPath,
       photoPaths: photoPaths ?? this.photoPaths,
       description: description ?? this.description,
@@ -59,4 +63,8 @@ ProjectModel projectFromRoute(BuildContext context) {
 
 int? stageNoFromRoute(BuildContext context) {
   return stitchArgsFromRoute(context).stageNo;
+}
+
+int? moduleNoFromRoute(BuildContext context) {
+  return stitchArgsFromRoute(context).moduleNo;
 }

@@ -1,38 +1,84 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/constants/stitch_screens.dart';
-import '../../shared/services/share_download_service.dart';
+import '../../shared/services/certificate_image_service.dart';
+import '../../shared/utils/module_certificate.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
+import '../../shared/widgets/certificate_cards.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
 import '../../theme/app_theme.dart';
 
-class CompletionCertificateScreen extends StatelessWidget {
+class CompletionCertificateScreen extends StatefulWidget {
   const CompletionCertificateScreen({super.key});
 
-  Future<void> _downloadAndFinish(BuildContext context) async {
-    final screen = stitchScreens[14];
+  @override
+  State<CompletionCertificateScreen> createState() =>
+      _CompletionCertificateScreenState();
+}
+
+class _CompletionCertificateScreenState
+    extends State<CompletionCertificateScreen> {
+  final _certificateKey = GlobalKey();
+  bool _busy = false;
+
+  String get _fileName {
     final project = projectFromRoute(context);
-    const completionDate = '10 August 2026';
+    return '${project.id}_completion_certificate';
+  }
 
-    final content = '''
-GOVERNMENT OF PUNJAB — ACAG
-Completion Certificate
-----------------------
-Project ID: ${project.id}
-Title: ${project.title}
-Owner: ${project.ownerName}
-Address: ${project.address}, ${project.city}
-Engineer: ${project.engineerName}
-Completion Date: $completionDate
-Consultancy: The Urban Unit
-'''.trim();
+  Future<void> _runCertificateAction(
+    Future<void> Function() action, {
+    required String successMessage,
+  }) async {
+    if (_busy) return;
 
-    await ShareDownloadService.downloadTextFile(
-      fileName: '${project.id}_completion_certificate.txt',
-      content: content,
+    setState(() => _busy = true);
+    try {
+      await action();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(successMessage)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _shareCertificate() async {
+    final project = projectFromRoute(context);
+
+    await _runCertificateAction(
+      () => CertificateImageService.shareImage(
+        key: _certificateKey,
+        fileName: _fileName,
+        shareText:
+            'ACAG completion certificate for ${project.ownerName} — ${project.id}',
+      ),
+      successMessage: 'Certificate image ready to share.',
     );
+  }
 
+  Future<void> _downloadCertificate() async {
+    await _runCertificateAction(
+      () => CertificateImageService.downloadImage(
+        key: _certificateKey,
+        fileName: _fileName,
+      ),
+      successMessage: 'Certificate image saved to your gallery.',
+    );
+  }
+
+  Future<void> _finish(BuildContext context) async {
+    final screen = stitchScreens[14];
     if (!context.mounted) return;
     navigateStitchNext(context, screen);
   }
@@ -42,14 +88,14 @@ Consultancy: The Urban Unit
     final screen = stitchScreens[14];
     final theme = Theme.of(context);
     final project = projectFromRoute(context);
-    const completionDate = '10 August 2026';
+    final completionDate = ModuleCertificate.formatDate(DateTime.now());
 
     return StitchFlowScaffold(
       screen: screen,
       moduleDescription:
           'Official completion certificate issued by ACAG — Government of Punjab.',
-      bottomLabel: 'Download Certificate',
-      onBottomPressed: () => _downloadAndFinish(context),
+      bottomLabel: _busy ? 'Please wait…' : 'Finish',
+      onBottomPressed: _busy ? null : () => _finish(context),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -67,155 +113,49 @@ Consultancy: The Urban Unit
             ),
           ),
           const SizedBox(height: 16),
-          FluentCard(
-            padding: const EdgeInsets.all(0),
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.4),
-                  width: 2,
+          RepaintBoundary(
+            key: _certificateKey,
+            child: ProjectCompletionCertificateCard(
+              project: project,
+              completionDate: completionDate,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _shareCertificate,
+                  icon: const Icon(Icons.share_outlined, size: 18),
+                  label: const Text('Share'),
                 ),
-                borderRadius: BorderRadius.circular(12),
               ),
-              child: Column(
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(10),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(
-                          Icons.account_balance,
-                          color: AppColors.onPrimaryContainer,
-                          size: 32,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'GOVERNMENT OF PUNJAB',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: AppColors.onPrimaryContainer,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                        Text(
-                          'Apni Chhat Apna Ghar (ACAG)',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: AppColors.onPrimary,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _downloadCertificate,
+                  icon: const Icon(Icons.download_outlined, size: 18),
+                  label: const Text('Download'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          FluentCard(
+            child: Row(
+              children: [
+                Icon(Icons.image_outlined, color: AppColors.primary, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Share or download the colorful certificate image with '
+                    '${project.ownerName}.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.onSurfaceVariant,
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        Text(
-                          'CERTIFICATE OF COMPLETION',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                            letterSpacing: 0.5,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'This is to certify that the construction project listed below '
-                          'has been completed in accordance with approved plans and '
-                          'Punjab Building Authority regulations.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: AppColors.onSurfaceVariant,
-                            height: 1.5,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        const Divider(color: AppColors.outlineVariant),
-                        const SizedBox(height: 16),
-                        _CertificateField(
-                          label: 'Owner Name',
-                          value: project.ownerName,
-                        ),
-                        _CertificateField(
-                          label: 'Plot / Address',
-                          value: '${project.address}, ${project.city}',
-                        ),
-                        _CertificateField(
-                          label: 'Project ID',
-                          value: project.id,
-                        ),
-                        _CertificateField(
-                          label: 'Project Title',
-                          value: project.title,
-                        ),
-                        _CertificateField(
-                          label: 'Completion Date',
-                          value: completionDate,
-                          highlight: true,
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              children: [
-                                Container(
-                                  width: 80,
-                                  height: 1,
-                                  color: AppColors.outline,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Engineer',
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: AppColors.onSurfaceVariant,
-                                  ),
-                                ),
-                                Text(
-                                  project.engineerName,
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: AppColors.primary,
-                                  width: 2,
-                                ),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                'ACAG\nSEAL',
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 9,
-                                  height: 1.2,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -233,50 +173,6 @@ Consultancy: The Urban Unit
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CertificateField extends StatelessWidget {
-  const _CertificateField({
-    required this.label,
-    required this.value,
-    this.highlight = false,
-  });
-
-  final String label;
-  final String value;
-  final bool highlight;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: highlight ? AppColors.primary : AppColors.onSurface,
-              ),
             ),
           ),
         ],

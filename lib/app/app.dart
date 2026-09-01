@@ -38,6 +38,7 @@ import '../modules/module_04/quality_assessment_screen.dart';
 import '../modules/module_05/project_handover_screen.dart';
 import '../modules/module_05/hse_compliance_screen.dart';
 import '../modules/module_05/completion_certificate_screen.dart';
+import '../shared/screens/module_completion_certificate_screen.dart';
 import '../theme/app_theme.dart';
 
 class AcagApp extends StatelessWidget {
@@ -96,6 +97,8 @@ class AcagApp extends StatelessWidget {
         AppRoutes.stitchHseCompliance: (_) => const HseComplianceScreen(),
         AppRoutes.stitchCompletionCertificate: (_) =>
             const CompletionCertificateScreen(),
+        AppRoutes.moduleCompletionCertificate: (_) =>
+            const ModuleCompletionCertificateScreen(),
         AppRoutes.ownerShell: (_) => const OwnerShell(),
         AppRoutes.ownerProject: (_) => const MyProjectScreen(),
         AppRoutes.ownerProgress: (_) => const ProgressScreen(),

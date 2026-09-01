@@ -817,7 +817,7 @@ class ProjectService {
   static int nextConstructionStageNo(List<Map<String, dynamic>> rows) =>
       completedConstructionStageCount(rows) + 1;
 
-  static Future<void> saveConstructionStage({
+  static Future<bool> saveConstructionStage({
     required String projectCodeOrId,
     required int stageNo,
     required String stageName,
@@ -873,9 +873,11 @@ class ProjectService {
 
     if (stageNo >= ConstructionStages.total) {
       await completeModule(projectCodeOrId: projectCodeOrId, moduleNo: 4);
+      return true;
     } else {
       moduleCompletionVersion.value++;
       invalidateProjectCache(projectCodeOrId);
+      return false;
     }
   }
 

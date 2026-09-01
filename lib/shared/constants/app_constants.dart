@@ -61,6 +61,7 @@ class AppRoutes {
   static const stitchProjectHandover = '/stitch/13-project-handover';
   static const stitchHseCompliance = '/stitch/14-hse-compliance';
   static const stitchCompletionCertificate = '/stitch/15-completion-certificate';
+  static const moduleCompletionCertificate = '/module/completion-certificate';
 
   static const ownerShell = '/owner';
   static const ownerProject = '/owner/project';
