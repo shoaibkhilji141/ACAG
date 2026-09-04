@@ -23,8 +23,10 @@ class ProjectService {
   static final Map<String, String> _uuidCache = {};
   static final Map<String, ProjectDetailsBundle> _bundleCache = {};
   static List<ProjectModel>? _assignedProjectsCache;
+  static List<ProjectModel>? _ownerProjectsCache;
 
   static List<ProjectModel>? get cachedAssignedProjects => _assignedProjectsCache;
+  static List<ProjectModel>? get cachedOwnerProjects => _ownerProjectsCache;
 
   static ProjectDetailsBundle? getCachedBundle(String projectCode) =>
       _bundleCache[projectCode];
@@ -40,6 +42,7 @@ class ProjectService {
       _bundleCache.clear();
     }
     _assignedProjectsCache = null;
+    _ownerProjectsCache = null;
   }
 
   static Future<String?> resolveProjectUuid(String projectCodeOrId) async {
@@ -198,6 +201,69 @@ class ProjectService {
 
     _assignedProjectsCache = MockData.projects;
     return MockData.projects;
+  }
+
+  /// Projects owned by the signed-in homeowner (cached).
+  static Future<List<ProjectModel>> listOwnerProjects({
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh &&
+        _ownerProjectsCache != null &&
+        _ownerProjectsCache!.isNotEmpty) {
+      return _ownerProjectsCache!;
+    }
+
+    try {
+      var query = _client.from('projects').select(_projectSelect);
+      final uid = _userId;
+      if (uid != null) {
+        query = query.eq('owner_user_id', uid);
+      }
+      final rows = await query.order('updated_at', ascending: false);
+      final projects = (rows as List)
+          .map((r) => projectFromRow(Map<String, dynamic>.from(r as Map)))
+          .toList();
+      if (projects.isNotEmpty) {
+        _ownerProjectsCache = projects;
+        for (final p in projects) {
+          fetchDetailsBundle(p.id, fallbackProject: p);
+        }
+        return projects;
+      }
+
+      final demo = await _fetchProjectRow('ACAG-1');
+      if (demo != null) {
+        final project = projectFromRow(demo);
+        _ownerProjectsCache = [project];
+        fetchDetailsBundle(project.id, fallbackProject: project);
+        return [project];
+      }
+    } catch (e) {
+      debugPrint('listOwnerProjects: $e');
+    }
+
+    return _ownerProjectsCache ?? const [];
+  }
+
+  static Future<ProjectModel?> primaryOwnerProject({
+    bool forceRefresh = false,
+  }) async {
+    final list = await listOwnerProjects(forceRefresh: forceRefresh);
+    return list.isEmpty ? null : list.first;
+  }
+
+  static Future<int> visitCountForProject(String projectCodeOrId) async {
+    try {
+      final uuid = await resolveProjectUuid(projectCodeOrId);
+      if (uuid == null) return 0;
+      final rows = await _client
+          .from('engineer_visits')
+          .select('id')
+          .eq('project_id', uuid);
+      return (rows as List).length;
+    } catch (_) {
+      return 0;
+    }
   }
 
   static Future<Map<String, dynamic>?> _fetchProjectRow(String codeOrId) async {

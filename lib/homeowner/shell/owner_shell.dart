@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/services/auth_service.dart';
+import '../../shared/services/notification_service.dart';
+import '../../shared/services/project_service.dart';
 import '../../shared/widgets/owner_bottom_nav.dart';
 import '../../theme/app_theme.dart';
 import '../screens/my_project_screen.dart';
@@ -23,6 +26,23 @@ class _OwnerShellState extends State<OwnerShell> {
     OwnerReportsScreen(),
     OwnerProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Warm caches + start 15s notification polling.
+    ProjectService.listOwnerProjects();
+    AuthService.currentProfile();
+    NotificationService.startPolling(
+      interval: const Duration(seconds: 15),
+    );
+  }
+
+  @override
+  void dispose() {
+    NotificationService.stopPolling();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

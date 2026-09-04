@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../shared/services/project_service.dart';
+import '../../shared/services/notification_service.dart';
 import '../../shared/utils/image_base64.dart';
 import '../../shared/widgets/engineer_bottom_nav.dart';
 import '../../theme/app_theme.dart';
@@ -26,6 +27,15 @@ class _EngineerShellState extends State<EngineerShell> {
   void initState() {
     super.initState();
     ProjectService.listAssignedProjects();
+    NotificationService.startPolling(
+      interval: const Duration(seconds: 15),
+    );
+  }
+
+  @override
+  void dispose() {
+    NotificationService.stopPolling();
+    super.dispose();
   }
 
   void _onNavTap(int index) {

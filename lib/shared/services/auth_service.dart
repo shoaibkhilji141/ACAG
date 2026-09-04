@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/app_constants.dart';
 import '../utils/image_base64.dart';
+import 'notification_service.dart';
 
 class AuthService {
   AuthService._();
@@ -25,10 +26,12 @@ class AuthService {
       throw Exception('Login failed. Please try again.');
     }
 
+    invalidateProfileCache();
+
     final profile = await client
         .from('profiles')
         .select(
-          'role, full_name, phone, location_text, city, profile_image_base64, profile_image_url',
+          'role, full_name, phone, cnic, email, location_text, city, is_active, profile_image_base64, profile_image_url',
         )
         .eq('id', userId)
         .maybeSingle();
@@ -37,6 +40,9 @@ class AuthService {
       await client.auth.signOut();
       throw Exception('Profile not found for this account.');
     }
+
+    _profileCache = Map<String, dynamic>.from(profile);
+    _profileCacheAt = DateTime.now();
 
     final roleStr = (profile['role'] as String?)?.toLowerCase();
     final role = switch (roleStr) {
@@ -63,13 +69,42 @@ class AuthService {
   }
 
   static Future<void> signOut() async {
+    invalidateProfileCache();
+    NotificationService.stopPolling();
+    NotificationService.invalidateCache();
     await client.auth.signOut();
   }
 
-  static Future<Map<String, dynamic>?> currentProfile() async {
+  static Map<String, dynamic>? _profileCache;
+  static DateTime? _profileCacheAt;
+  static const _profileTtl = Duration(minutes: 5);
+
+  static void invalidateProfileCache() {
+    _profileCache = null;
+    _profileCacheAt = null;
+  }
+
+  static Map<String, dynamic>? get cachedProfile => _profileCache;
+
+  static Future<Map<String, dynamic>?> currentProfile({
+    bool forceRefresh = false,
+  }) async {
     final userId = client.auth.currentUser?.id;
     if (userId == null) return null;
-    return await client.from('profiles').select().eq('id', userId).maybeSingle();
+
+    final fresh = _profileCacheAt != null &&
+        DateTime.now().difference(_profileCacheAt!) < _profileTtl;
+    if (!forceRefresh && _profileCache != null && fresh) {
+      return _profileCache;
+    }
+
+    final row =
+        await client.from('profiles').select().eq('id', userId).maybeSingle();
+    if (row != null) {
+      _profileCache = Map<String, dynamic>.from(row);
+      _profileCacheAt = DateTime.now();
+    }
+    return _profileCache;
   }
 
   /// Saves profile image as base64 in `profiles.profile_image_base64` (no Storage).
@@ -104,6 +139,7 @@ class AuthService {
       throw Exception('Could not save profile photo.');
     }
 
+    invalidateProfileCache();
     return base64;
   }
 
@@ -111,25 +147,32 @@ class AuthService {
     required String fullName,
     required String phone,
     required String locationText,
+    String? cnic,
   }) async {
     final userId = client.auth.currentUser?.id;
     if (userId == null) {
       throw Exception('Please login again to update your profile.');
     }
 
+    final payload = <String, dynamic>{
+      'full_name': fullName.trim(),
+      'phone': phone.trim(),
+      'location_text': locationText.trim(),
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (cnic != null) {
+      payload['cnic'] = cnic.trim();
+    }
+
     final updated = await client
         .from('profiles')
-        .update({
-          'full_name': fullName.trim(),
-          'phone': phone.trim(),
-          'location_text': locationText.trim(),
-          'updated_at': DateTime.now().toIso8601String(),
-        })
+        .update(payload)
         .eq('id', userId)
         .select('id');
 
     if ((updated as List).isEmpty) {
       throw Exception('Could not update profile.');
     }
+    invalidateProfileCache();
   }
 }
