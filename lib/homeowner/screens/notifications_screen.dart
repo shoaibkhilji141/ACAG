@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/models/models.dart';
 import '../../shared/services/notification_service.dart';
+import '../../shared/widgets/acag_app_bar.dart';
 import '../../shared/widgets/empty_placeholder.dart';
 import '../../shared/widgets/notification_tile.dart';
 import '../../theme/app_theme.dart';
@@ -62,64 +63,76 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Notifications',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: AppColors.primary,
-          ),
-        ),
-        actions: [
+      appBar: AcagAppBar(
+        title: 'Notifications',
+        showBranding: false,
+        notificationCount: unread,
+      ),
+      body: Column(
+        children: [
           if (unread > 0)
-            TextButton(
-              onPressed: _markAll,
-              child: const Text('Mark all read'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _markAll,
+                  child: const Text('Mark all read'),
+                ),
+              ),
+            ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await NotificationService.listMine(forceRefresh: true);
+                await _reload();
+              },
+              child: _loading
+                  ? ListView(
+                      children: const [
+                        SizedBox(height: 120),
+                        Center(child: CircularProgressIndicator()),
+                      ],
+                    )
+                  : _items.isEmpty
+                      ? ListView(
+                          children: const [
+                            SizedBox(height: 80),
+                            EmptyPlaceholder(
+                              icon: Icons.notifications_none_outlined,
+                              message:
+                                  'Visit updates and announcements will appear here.',
+                            ),
+                          ],
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                          itemCount: _items.length,
+                          itemBuilder: (context, index) {
+                            final item = _items[index];
+                            return Opacity(
+                              opacity: item.isRead ? 0.7 : 1,
+                              child: NotificationTile(
+                                notification: item,
+                                onTap: () => _onTap(item),
+                                showDivider: index < _items.length - 1,
+                              ),
+                            );
+                          },
+                        ),
+            ),
+          ),
+          if (!_loading && _items.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                '${_items.length} notification${_items.length == 1 ? '' : 's'}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
             ),
         ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await NotificationService.listMine(forceRefresh: true);
-          await _reload();
-        },
-        child: _loading
-            ? ListView(
-                children: const [
-                  SizedBox(height: 120),
-                  Center(child: CircularProgressIndicator()),
-                ],
-              )
-            : _items.isEmpty
-                ? ListView(
-                    children: const [
-                      SizedBox(height: 80),
-                      EmptyPlaceholder(
-                        icon: Icons.notifications_none_outlined,
-                        message:
-                            'No notifications yet. Visit updates and announcements will appear here.',
-                      ),
-                    ],
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    itemCount: _items.length,
-                    itemBuilder: (context, index) {
-                      final item = _items[index];
-                      return Opacity(
-                        opacity: item.isRead ? 0.72 : 1,
-                        child: NotificationTile(
-                          notification: item,
-                          onTap: () => _onTap(item),
-                          showDivider: index < _items.length - 1,
-                        ),
-                      );
-                    },
-                  ),
       ),
     );
   }

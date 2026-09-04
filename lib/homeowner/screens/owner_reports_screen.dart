@@ -1,13 +1,70 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
+import '../../shared/constants/app_constants.dart';
+import '../../shared/constants/construction_modules.dart';
 import '../../shared/models/models.dart';
-import '../../shared/utils/mock_data.dart';
+import '../../shared/services/notification_service.dart';
+import '../../shared/services/project_service.dart';
+import '../../shared/utils/module_certificate.dart';
+import '../../shared/utils/project_route.dart';
+import '../../shared/widgets/acag_app_bar.dart';
 import '../../shared/widgets/app_card.dart';
-import '../../shared/widgets/section_header.dart';
+import '../../shared/widgets/empty_placeholder.dart';
 import '../../theme/app_theme.dart';
 
-class OwnerReportsScreen extends StatelessWidget {
+class OwnerReportsScreen extends StatefulWidget {
   const OwnerReportsScreen({super.key});
+
+  @override
+  State<OwnerReportsScreen> createState() => _OwnerReportsScreenState();
+}
+
+class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
+  List<ModuleReportItem> _reports = const [];
+  bool _loading = true;
+  int _unread = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    NotificationService.version.addListener(_reloadBadge);
+    _reload();
+  }
+
+  @override
+  void dispose() {
+    NotificationService.version.removeListener(_reloadBadge);
+    super.dispose();
+  }
+
+  Future<void> _reloadBadge() async {
+    final count = await NotificationService.unreadCount();
+    if (mounted) setState(() => _unread = count);
+  }
+
+  Future<void> _reload() async {
+    setState(() => _loading = true);
+    final reports = await ProjectService.listOwnerModuleReports();
+    final count = await NotificationService.unreadCount();
+    if (!mounted) return;
+    setState(() {
+      _reports = reports;
+      _unread = count;
+      _loading = false;
+    });
+  }
+
+  Future<void> _openReport(ModuleReportItem report) async {
+    await Navigator.of(context).pushNamed(
+      AppRoutes.moduleCompletionCertificate,
+      arguments: StitchRouteArgs(
+        project: report.project,
+        moduleNo: report.moduleNo,
+        completedAt: report.completedAt,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,258 +72,122 @@ class OwnerReportsScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(
-          'Inspection Reports',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: AppColors.primary,
-          ),
-        ),
-        centerTitle: false,
+      appBar: AcagAppBar(
+        title: 'Reports',
+        showBranding: false,
+        notificationCount: _unread,
+        onNotificationTap: () {
+          Navigator.of(context).pushNamed(AppRoutes.ownerNotifications);
+        },
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: [
-          SectionHeader(title: 'All Reports'),
-          const SizedBox(height: 4),
-          Text(
-            'Tap a report to view inspection details',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          for (final report in MockData.reports) ...[
-            _ReportCard(
-              report: report,
-              onTap: () => _showReportDetail(context, report),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ],
-      ),
-    );
-  }
-
-  void _showReportDetail(BuildContext context, ReportItem report) {
-    final theme = Theme.of(context);
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.surfaceLowest,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.outlineVariant,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                report.title,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${report.id} · ${report.date}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  _ScoreRing(score: report.score),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Inspection Score',
-                          style: theme.textTheme.labelMedium,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${report.score}/100',
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryFixed.withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            report.result,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: AppColors.primaryContainer,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+      body: RefreshIndicator(
+        onRefresh: _reload,
+        child: _loading
+            ? ListView(
+                children: const [
+                  SizedBox(height: 120),
+                  Center(child: CircularProgressIndicator()),
                 ],
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Summary',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Inspection completed by Engr. Muhammad Usman. '
-                'All structural checks passed per ACAG Punjab guidelines. '
-                'Site conditions verified with GPS and AI validation.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Close'),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
+              )
+            : _reports.isEmpty
+                ? ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: const [
+                      SizedBox(height: 80),
+                      EmptyPlaceholder(
+                        icon: Icons.description_outlined,
+                        message:
+                            'Module reports will appear here as construction modules are completed.',
+                      ),
+                    ],
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _reports.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final report = _reports[index];
+                      final title =
+                          ModuleCertificate.titleForModule(report.moduleNo);
+                      final date = DateFormat('dd MMM yyyy')
+                          .format(report.completedAt.toLocal());
+                      final moduleInfo = report.moduleNo >= 1 &&
+                              report.moduleNo <= constructionModules.length
+                          ? constructionModules[report.moduleNo - 1]
+                          : null;
 
-class _ReportCard extends StatelessWidget {
-  const _ReportCard({
-    required this.report,
-    required this.onTap,
-  });
-
-  final ReportItem report;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return FluentCard(
-      onTap: onTap,
-      child: Row(
-        children: [
-          _ScoreRing(score: report.score, size: 56),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  report.title,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+                      return FluentCard(
+                        onTap: () => _openReport(report),
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: (moduleInfo?.accentColor ??
+                                        AppColors.primary)
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                moduleInfo?.icon ?? Icons.description_outlined,
+                                color: moduleInfo?.accentColor ??
+                                    AppColors.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Module ${report.moduleNo.toString().padLeft(2, '0')} — $title',
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${report.project.id} · $date',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: AppColors.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    AppColors.success.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Completed',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: AppColors.success,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.chevron_right,
+                              color: AppColors.outline,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${report.id} · ${report.date}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryFixed.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    report.result,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: AppColors.primaryContainer,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right, color: AppColors.outline),
-        ],
-      ),
-    );
-  }
-}
-
-class _ScoreRing extends StatelessWidget {
-  const _ScoreRing({
-    required this.score,
-    this.size = 64,
-  });
-
-  final int score;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final progress = score / 100.0;
-
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox(
-            width: size,
-            height: size,
-            child: CircularProgressIndicator(
-              value: progress,
-              strokeWidth: size * 0.08,
-              backgroundColor:
-                  AppColors.outlineVariant.withValues(alpha: 0.35),
-              color: AppColors.primaryContainer,
-            ),
-          ),
-          Text(
-            '$score',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: AppColors.primary,
-            ),
-          ),
-        ],
       ),
     );
   }

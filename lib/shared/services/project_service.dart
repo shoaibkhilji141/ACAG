@@ -413,6 +413,49 @@ class ProjectService {
     return reports;
   }
 
+  /// Module completion reports for the signed-in homeowner's projects.
+  static Future<List<ModuleReportItem>> listOwnerModuleReports() async {
+    final projects = await listOwnerProjects();
+    if (projects.isEmpty) return const [];
+
+    final reports = <ModuleReportItem>[];
+    for (final project in projects) {
+      try {
+        final uuid = await resolveProjectUuid(project.id);
+        if (uuid == null) continue;
+        final rows = await _client
+            .from('project_modules')
+            .select('module_no, is_completed, completed_at')
+            .eq('project_id', uuid)
+            .eq('is_completed', true)
+            .order('module_no');
+        for (final row in (rows as List)) {
+          final map = Map<String, dynamic>.from(row as Map);
+          final raw = map['module_no'];
+          final moduleNo =
+              raw is num ? raw.toInt() : int.tryParse('$raw') ?? 0;
+          if (moduleNo < 1) continue;
+          final completedRaw = map['completed_at'] as String?;
+          final completedAt = completedRaw != null
+              ? DateTime.tryParse(completedRaw) ?? DateTime.now()
+              : DateTime.now();
+          reports.add(
+            ModuleReportItem(
+              project: project,
+              moduleNo: moduleNo,
+              completedAt: completedAt,
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('listOwnerModuleReports(${project.id}): $e');
+      }
+    }
+
+    reports.sort((a, b) => b.completedAt.compareTo(a.completedAt));
+    return reports;
+  }
+
   /// Image upload on-site counts as a visit (current date + next = +7 days).
   /// Debounced so multi-photo sessions do not create duplicate visits.
   static Future<void> recordSiteVisitIfNeeded(

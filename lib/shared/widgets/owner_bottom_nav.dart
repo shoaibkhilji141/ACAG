@@ -4,7 +4,7 @@ import '../../theme/app_theme.dart';
 
 enum OwnerNavItem { dashboard, myProject, reports, profile }
 
-/// Owner bottom navigation with pill-style active indicator.
+/// Owner bottom navigation — same visual language as engineer nav (no camera FAB).
 class OwnerBottomNav extends StatelessWidget {
   const OwnerBottomNav({
     super.key,
@@ -16,10 +16,26 @@ class OwnerBottomNav extends StatelessWidget {
   final ValueChanged<int> onTap;
 
   static const _items = [
-    (icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard, label: 'Dashboard'),
-    (icon: Icons.home_work_outlined, activeIcon: Icons.home_work, label: 'My Project'),
-    (icon: Icons.description_outlined, activeIcon: Icons.description, label: 'Reports'),
-    (icon: Icons.person_outline, activeIcon: Icons.person, label: 'Profile'),
+    (
+      icon: Icons.dashboard_outlined,
+      activeIcon: Icons.dashboard,
+      label: 'Dashboard'
+    ),
+    (
+      icon: Icons.home_work_outlined,
+      activeIcon: Icons.home_work,
+      label: 'My Project'
+    ),
+    (
+      icon: Icons.assessment_outlined,
+      activeIcon: Icons.assessment,
+      label: 'Reports'
+    ),
+    (
+      icon: Icons.person_outline,
+      activeIcon: Icons.person,
+      label: 'Profile'
+    ),
   ];
 
   @override
@@ -44,13 +60,13 @@ class OwnerBottomNav extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: SizedBox(
+          height: 64,
           child: Row(
             children: [
               for (var i = 0; i < _items.length; i++)
                 Expanded(
-                  child: _PillNavItem(
+                  child: _NavItem(
                     icon: _items[i].icon,
                     activeIcon: _items[i].activeIcon,
                     label: _items[i].label,
@@ -67,8 +83,8 @@ class OwnerBottomNav extends StatelessWidget {
   }
 }
 
-class _PillNavItem extends StatelessWidget {
-  const _PillNavItem({
+class _NavItem extends StatelessWidget {
+  const _NavItem({
     required this.icon,
     required this.activeIcon,
     required this.label,
@@ -90,34 +106,20 @@ class _PillNavItem extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.primary.withValues(alpha: 0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(selected ? activeIcon : icon, color: color, size: 22),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: color,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                fontSize: 10,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(selected ? activeIcon : icon, color: color, size: 24),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              fontSize: 10,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

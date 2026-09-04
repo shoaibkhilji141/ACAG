@@ -9,9 +9,9 @@ import '../../shared/services/auth_service.dart';
 import '../../shared/services/notification_service.dart';
 import '../../shared/services/project_service.dart';
 import '../../shared/utils/image_base64.dart';
+import '../../shared/widgets/acag_app_bar.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/edit_profile_sheet.dart';
-import '../../shared/widgets/section_header.dart';
 import '../../theme/app_theme.dart';
 
 class OwnerProfileScreen extends StatefulWidget {
@@ -33,17 +33,27 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   ProjectModel? _project;
   File? _localImage;
   bool _uploading = false;
-  bool _loading = true;
+  int _unread = 0;
 
   @override
   void initState() {
     super.initState();
+    NotificationService.version.addListener(_loadBadge);
     final cached = AuthService.cachedProfile;
-    if (cached != null) {
-      _applyProfile(cached);
-      _loading = false;
-    }
+    if (cached != null) _applyProfile(cached);
     _load();
+    _loadBadge();
+  }
+
+  @override
+  void dispose() {
+    NotificationService.version.removeListener(_loadBadge);
+    super.dispose();
+  }
+
+  Future<void> _loadBadge() async {
+    final count = await NotificationService.unreadCount();
+    if (mounted) setState(() => _unread = count);
   }
 
   void _applyProfile(Map<String, dynamic> profile) {
@@ -65,7 +75,6 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     setState(() {
       if (profile != null) _applyProfile(profile);
       _project = project;
-      _loading = false;
     });
   }
 
@@ -125,6 +134,38 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     }
   }
 
+  void _logout(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await AuthService.signOut();
+              if (!context.mounted) return;
+              Navigator.of(context).pushNamedAndRemoveUntil(
+                AppRoutes.login,
+                (route) => false,
+              );
+            },
+            child: const Text(
+              'Logout',
+              style: TextStyle(color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -132,9 +173,8 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     final displayPhone = _phone ?? '—';
     final displayEmail = _email ?? AppConstants.ownerEmail;
     final displayLocation = _location ?? '—';
-    final displayCnic = (_cnic == null || _cnic!.trim().isEmpty)
-        ? '—'
-        : _cnic!;
+    final displayCnic =
+        (_cnic == null || _cnic!.trim().isEmpty) ? '—' : _cnic!;
     final statusLabel = (_isActive ?? true) ? 'Active' : 'Inactive';
     final initials = displayName
         .split(' ')
@@ -143,293 +183,342 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
         .map((p) => p[0].toUpperCase())
         .join();
 
+    final progressPct = _project == null
+        ? '0%'
+        : '${(_project!.progress * 100).round()}%';
+
+    final stats = [
+      (label: 'Progress', value: progressPct),
+      (label: 'Project', value: _project?.id ?? '—'),
+      (label: 'Status', value: statusLabel),
+    ];
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(
-          'Profile',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: AppColors.primary,
-          ),
-        ),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            tooltip: 'Notifications',
-            onPressed: () {
-              Navigator.pushNamed(context, AppRoutes.ownerNotifications);
-            },
-            icon: const Icon(Icons.notifications_outlined),
-          ),
-        ],
+      appBar: AcagAppBar(
+        title: 'Profile',
+        showBranding: false,
+        notificationCount: _unread,
+        onNotificationTap: () {
+          Navigator.of(context).pushNamed(AppRoutes.ownerNotifications);
+        },
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            FluentCard(
+              padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  FluentCard(
-                    child: Column(
-                      children: [
-                        Stack(
-                          children: [
-                            CircleAvatar(
-                              radius: 40,
-                              backgroundColor: AppColors.primaryContainer,
-                              backgroundImage: _localImage != null
-                                  ? FileImage(_localImage!)
-                                  : imageProviderFromBase64(_imageUrl),
-                              child: (_localImage == null &&
-                                      imageProviderFromBase64(_imageUrl) ==
-                                          null)
-                                  ? Text(
-                                      initials.isEmpty ? 'HO' : initials,
-                                      style: theme.textTheme.headlineMedium
-                                          ?.copyWith(
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 44,
+                        backgroundColor: AppColors.primaryContainer,
+                        backgroundImage: _localImage != null
+                            ? FileImage(_localImage!)
+                            : imageProviderFromBase64(_imageUrl),
+                        child: (_localImage == null &&
+                                imageProviderFromBase64(_imageUrl) == null)
+                            ? Text(
+                                initials.isEmpty ? 'HO' : initials,
+                                style: theme.textTheme.headlineMedium?.copyWith(
+                                  color: AppColors.onPrimary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              )
+                            : null,
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Material(
+                          color: AppColors.primary,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: _uploading ? null : _pickImage,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: _uploading
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
                                         color: AppColors.onPrimary,
-                                        fontWeight: FontWeight.w700,
                                       ),
                                     )
-                                  : null,
-                            ),
-                            Positioned(
-                              right: 0,
-                              bottom: 0,
-                              child: Material(
-                                color: AppColors.primary,
-                                shape: const CircleBorder(),
-                                child: InkWell(
-                                  customBorder: const CircleBorder(),
-                                  onTap: _uploading ? null : _pickImage,
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(7),
-                                    child: Icon(
+                                  : const Icon(
                                       Icons.photo_camera_outlined,
-                                      size: 14,
+                                      size: 16,
                                       color: AppColors.onPrimary,
                                     ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          displayName,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          displayPhone,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: AppColors.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: (_isActive ?? true)
-                                ? AppColors.success.withValues(alpha: 0.12)
-                                : AppColors.error.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            'Account: $statusLabel',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: (_isActive ?? true)
-                                  ? AppColors.success
-                                  : AppColors.error,
-                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: SectionHeader(title: 'Personal Details'),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
-                  FluentCard(
-                    child: Column(
-                      children: [
-                        _ProfileField(
-                          icon: Icons.person_outline,
-                          label: 'Name',
-                          value: displayName,
-                        ),
-                        const Divider(height: 24),
-                        _ProfileField(
-                          icon: Icons.badge_outlined,
-                          label: 'CNIC',
-                          value: displayCnic,
-                        ),
-                        const Divider(height: 24),
-                        _ProfileField(
-                          icon: Icons.phone_outlined,
-                          label: 'Phone number',
-                          value: displayPhone,
-                        ),
-                        const Divider(height: 24),
-                        _ProfileField(
-                          icon: Icons.email_outlined,
-                          label: 'Email',
-                          value: displayEmail,
-                        ),
-                        const Divider(height: 24),
-                        _ProfileField(
-                          icon: Icons.home_outlined,
-                          label: 'Address',
-                          value: displayLocation,
-                        ),
-                      ],
+                  Text(
+                    displayName,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  FluentCard(
-                    padding: EdgeInsets.zero,
-                    child: ListTile(
-                      leading: const Icon(Icons.edit_outlined,
-                          color: AppColors.primary),
-                      title: const Text('Edit Profile'),
-                      trailing: const Icon(Icons.chevron_right,
-                          color: AppColors.outline),
-                      onTap: _editProfile,
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'House Owner',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                  if (_project != null) ...[
-                    const SizedBox(height: 20),
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: SectionHeader(title: 'Linked Project'),
-                    ),
-                    const SizedBox(height: 12),
-                    FluentCard(
-                      child: Column(
-                        children: [
-                          _ProfileField(
-                            icon: Icons.tag_outlined,
-                            label: 'Project ID',
-                            value: _project!.id,
-                          ),
-                          const Divider(height: 24),
-                          _ProfileField(
-                            icon: Icons.home_work_outlined,
-                            label: 'House',
-                            value: _project!.title,
-                          ),
-                          const Divider(height: 24),
-                          _ProfileField(
-                            icon: Icons.location_on_outlined,
-                            label: 'Site',
-                            value: _project!.locationLine,
-                          ),
-                          const Divider(height: 24),
-                          _ProfileField(
-                            icon: Icons.engineering_outlined,
-                            label: 'Assigned Engineer',
-                            value: _project!.engineerName,
-                          ),
-                        ],
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.phone_outlined,
+                        size: 14,
+                        color: AppColors.outline,
                       ),
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      NotificationService.stopPolling();
-                      await AuthService.signOut();
-                      if (!context.mounted) return;
-                      Navigator.pushNamedAndRemoveUntil(
-                        context,
-                        AppRoutes.login,
-                        (_) => false,
-                      );
-                    },
-                    icon: const Icon(Icons.logout, color: AppColors.error),
-                    label: Text(
-                      'Logout',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: AppColors.error,
+                      const SizedBox(width: 4),
+                      Text(displayPhone, style: theme.textTheme.bodySmall),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.location_on_outlined,
+                        size: 14,
+                        color: AppColors.outline,
                       ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 52),
-                      side: BorderSide(
-                        color: AppColors.error.withValues(alpha: 0.5),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          displayLocation,
+                          style: theme.textTheme.bodySmall,
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                for (var i = 0; i < stats.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 12),
+                  Expanded(
+                    child: FluentCard(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Column(
+                        children: [
+                          Text(
+                            stats[i].value,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            stats[i].label,
+                            style: theme.textTheme.labelSmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Account Details',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FluentCard(
+              child: Column(
+                children: [
+                  _DetailRow(label: 'CNIC', value: displayCnic),
+                  Divider(
+                    height: 22,
+                    color: AppColors.outlineVariant.withValues(alpha: 0.35),
+                  ),
+                  _DetailRow(label: 'Email', value: displayEmail),
+                  Divider(
+                    height: 22,
+                    color: AppColors.outlineVariant.withValues(alpha: 0.35),
+                  ),
+                  _DetailRow(label: 'Account status', value: statusLabel),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Settings',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FluentCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  _SettingsTile(
+                    icon: Icons.person_outline,
+                    title: 'Edit Profile',
+                    onTap: _editProfile,
+                  ),
+                  _divider(),
+                  _SettingsTile(
+                    icon: Icons.notifications_outlined,
+                    title: 'Notifications',
+                    onTap: () {
+                      Navigator.of(context)
+                          .pushNamed(AppRoutes.ownerNotifications);
+                    },
+                  ),
+                  _divider(),
+                  _SettingsTile(
+                    icon: Icons.lock_outline,
+                    title: 'Change Password',
+                    onTap: () {},
+                  ),
+                  _divider(),
+                  _SettingsTile(
+                    icon: Icons.help_outline,
+                    title: 'Help & Support',
+                    onTap: () {},
+                  ),
+                  _divider(),
+                  _SettingsTile(
+                    icon: Icons.info_outline,
+                    title: 'About ACAG',
+                    onTap: () {},
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _logout(context),
+                icon: const Icon(Icons.logout, color: AppColors.error),
+                label: const Text(
+                  'Logout',
+                  style: TextStyle(color: AppColors.error),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.error),
+                  minimumSize: const Size.fromHeight(48),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
     );
   }
+
+  Widget _divider() => Divider(
+        height: 1,
+        indent: 56,
+        color: AppColors.outlineVariant.withValues(alpha: 0.35),
+      );
 }
 
-class _ProfileField extends StatelessWidget {
-  const _ProfileField({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
 
-  final IconData icon;
   final String label;
   final String value;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: AppColors.primary, size: 20),
-        ),
-        const SizedBox(width: 14),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+          child: Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SettingsTile extends StatelessWidget {
+  const _SettingsTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListTile(
+      leading: Icon(icon, color: AppColors.primary, size: 22),
+      title: Text(
+        title,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      trailing: const Icon(Icons.chevron_right, color: AppColors.outline),
+      onTap: onTap,
     );
   }
 }

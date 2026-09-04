@@ -7,6 +7,7 @@ import '../../shared/services/notification_service.dart';
 import '../../shared/services/project_service.dart';
 import '../../shared/widgets/acag_app_bar.dart';
 import '../../shared/widgets/app_card.dart';
+import '../../shared/widgets/kpi_card.dart';
 import '../../shared/widgets/notification_tile.dart';
 import '../../shared/widgets/progress_ring.dart';
 import '../../shared/widgets/section_header.dart';
@@ -21,8 +22,9 @@ class OwnerDashboardScreen extends StatefulWidget {
 
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   ProjectModel? _project;
-  Map<String, dynamic>? _profile;
   List<NotificationModel> _notifications = const [];
+  String _ownerName = 'Home Owner';
+  String _location = 'Punjab';
   int _unread = 0;
   int _visitCount = 0;
   bool _loading = true;
@@ -30,46 +32,29 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    NotificationService.version.addListener(_onNotify);
-    _bootstrap();
+    NotificationService.version.addListener(_reload);
+    final cachedList = ProjectService.cachedOwnerProjects;
+    final cachedProfile = AuthService.cachedProfile;
+    if ((cachedList != null && cachedList.isNotEmpty) ||
+        cachedProfile != null) {
+      _project =
+          (cachedList != null && cachedList.isNotEmpty) ? cachedList.first : null;
+      _ownerName = cachedProfile?['full_name'] as String? ?? _ownerName;
+      _location = cachedProfile?['location_text'] as String? ??
+          cachedProfile?['city'] as String? ??
+          _location;
+      _notifications = NotificationService.cachedList?.take(5).toList() ??
+          const [];
+      _unread = NotificationService.cachedUnread ?? 0;
+      _loading = false;
+    }
+    _reload();
   }
 
   @override
   void dispose() {
-    NotificationService.version.removeListener(_onNotify);
+    NotificationService.version.removeListener(_reload);
     super.dispose();
-  }
-
-  void _onNotify() {
-    _loadNotificationsOnly();
-  }
-
-  Future<void> _bootstrap() async {
-    final cachedList = ProjectService.cachedOwnerProjects;
-    final cachedProject =
-        (cachedList != null && cachedList.isNotEmpty) ? cachedList.first : null;
-    final cachedProfile = AuthService.cachedProfile;
-    final cachedNotes = NotificationService.cachedList;
-    if (cachedProject != null || cachedProfile != null) {
-      setState(() {
-        _project = cachedProject;
-        _profile = cachedProfile;
-        _notifications = cachedNotes?.take(5).toList() ?? const [];
-        _unread = NotificationService.cachedUnread ?? 0;
-        _loading = false;
-      });
-    }
-    await _reload();
-  }
-
-  Future<void> _loadNotificationsOnly() async {
-    final notes = await NotificationService.listMine(limit: 5);
-    final unread = await NotificationService.unreadCount();
-    if (!mounted) return;
-    setState(() {
-      _notifications = notes;
-      _unread = unread;
-    });
   }
 
   Future<void> _reload() async {
@@ -80,35 +65,20 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     var visits = 0;
     if (project != null) {
       visits = await ProjectService.visitCountForProject(project.id);
-      // Warm details cache for project tab.
-      unawaitedPrefetch(project.id);
+      ProjectService.prefetchDetails(project.id);
     }
     if (!mounted) return;
     setState(() {
-      _profile = profile;
       _project = project;
       _notifications = notes;
       _unread = unread;
       _visitCount = visits;
+      _ownerName = profile?['full_name'] as String? ?? _ownerName;
+      _location = profile?['location_text'] as String? ??
+          profile?['city'] as String? ??
+          _location;
       _loading = false;
     });
-  }
-
-  void unawaitedPrefetch(String code) {
-    ProjectService.prefetchDetails(code);
-  }
-
-  String get _ownerName =>
-      _profile?['full_name'] as String? ?? 'Home Owner';
-
-  String get _location =>
-      _profile?['location_text'] as String? ??
-      _profile?['city'] as String? ??
-      '—';
-
-  String get _initials {
-    final parts = _ownerName.split(' ').where((p) => p.isNotEmpty).take(2);
-    return parts.map((p) => p[0].toUpperCase()).join();
   }
 
   @override
@@ -119,13 +89,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AcagAppBar(
-        showAvatar: true,
-        avatarInitials: _initials.isEmpty ? 'HO' : _initials,
         notificationCount: _unread,
         onNotificationTap: () {
-          Navigator.pushNamed(context, AppRoutes.ownerNotifications);
+          Navigator.of(context).pushNamed(AppRoutes.ownerNotifications);
         },
-        onAvatarTap: () {},
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -140,135 +107,167 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Welcome, $_ownerName',
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+              _WelcomeHeader(
+                theme: theme,
+                name: _ownerName,
+                location: _location,
               ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(
-                    Icons.location_on_outlined,
-                    size: 16,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      _location,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               if (_loading && project == null)
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
+                  padding: EdgeInsets.symmetric(vertical: 24),
                   child: Center(child: CircularProgressIndicator()),
                 )
-              else if (project == null)
-                FluentCard(
-                  child: Text(
-                    'No house project is linked to this account yet.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                )
               else ...[
-                _ProjectStatusHero(
-                  project: project,
-                  onViewDetails: () {
-                    Navigator.pushNamed(context, AppRoutes.ownerProject);
-                  },
-                ),
-                const SizedBox(height: 20),
-                const SectionHeader(title: 'Quick Info'),
-                const SizedBox(height: 12),
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
-                  childAspectRatio: 1.35,
+                  childAspectRatio: 1.15,
                   children: [
-                    _QuickInfoTile(
-                      icon: Icons.fact_check_outlined,
-                      label: 'Visits Done',
+                    KpiCard(
+                      value: project == null
+                          ? '0'
+                          : '${(project.progress * 100).round()}%',
+                      label: 'Progress',
+                      icon: Icons.pie_chart_outline,
+                      filled: true,
+                      onTap: () {
+                        Navigator.of(context)
+                            .pushNamed(AppRoutes.ownerProject);
+                      },
+                    ),
+                    KpiCard(
+                      value: '$_unread',
+                      label: 'Alerts',
+                      icon: Icons.notifications_outlined,
+                      onTap: () {
+                        Navigator.of(context)
+                            .pushNamed(AppRoutes.ownerNotifications);
+                      },
+                    ),
+                    KpiCard(
                       value: '$_visitCount',
+                      label: 'Visits',
+                      icon: Icons.fact_check_outlined,
+                      onTap: () {
+                        Navigator.of(context)
+                            .pushNamed(AppRoutes.ownerProject);
+                      },
                     ),
-                    _QuickInfoTile(
-                      icon: Icons.event_outlined,
+                    KpiCard(
+                      value: project?.nextInspection ?? '—',
                       label: 'Next Visit',
-                      value: project.nextInspection,
-                    ),
-                    _QuickInfoTile(
-                      icon: Icons.engineering_outlined,
-                      label: 'Engineer',
-                      value: project.engineerName,
-                    ),
-                    _QuickInfoTile(
-                      icon: Icons.construction_outlined,
-                      label: 'Status',
-                      value: '${project.statusLabel} / ${project.phase}',
-                      compact: true,
+                      icon: Icons.event_outlined,
+                      onTap: () {
+                        Navigator.of(context)
+                            .pushNamed(AppRoutes.ownerProject);
+                      },
                     ),
                   ],
                 ),
+                const SizedBox(height: 28),
+                SectionHeader(
+                  title: 'House Overview',
+                  actionLabel: 'View All',
+                  onActionTap: () {
+                    Navigator.of(context).pushNamed(AppRoutes.ownerProject);
+                  },
+                ),
+                const SizedBox(height: 12),
+                if (project == null)
+                  FluentCard(
+                    child: Text(
+                      'No house project is linked to this account yet.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  )
+                else
+                  FluentCard(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      children: [
+                        ProgressRing(
+                          progress: project.progress,
+                          size: 100,
+                          strokeWidth: 9,
+                          centerSubtext: 'Complete',
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                project.title,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                project.id,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: AppColors.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '${project.statusLabel} · ${project.phase}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: AppColors.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Engineer: ${project.engineerName}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: AppColors.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: project.progress,
+                                  minHeight: 6,
+                                  backgroundColor: AppColors.outlineVariant
+                                      .withValues(alpha: 0.3),
+                                  color: AppColors.primaryContainer,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 28),
+                SectionHeader(
+                  title: 'Recent Notifications',
+                  actionLabel: 'View All',
+                  onActionTap: () {
+                    Navigator.of(context)
+                        .pushNamed(AppRoutes.ownerNotifications);
+                  },
+                ),
+                const SizedBox(height: 8),
+                if (_notifications.isEmpty)
+                  FluentCard(
+                    child: Text(
+                      'No notifications yet.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  )
+                else
+                  NotificationCard(notifications: _notifications),
               ],
-              const SizedBox(height: 24),
-              SectionHeader(
-                title: 'Recent Updates',
-                actionLabel: 'View All',
-                onActionTap: () {
-                  Navigator.pushNamed(context, AppRoutes.ownerNotifications);
-                },
-              ),
-              const SizedBox(height: 12),
-              if (_notifications.isEmpty)
-                FluentCard(
-                  child: Text(
-                    'No notifications yet.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                )
-              else
-                NotificationCard(notifications: _notifications),
-              const SizedBox(height: 24),
-              const SectionHeader(title: 'Shortcuts'),
-              const SizedBox(height: 12),
-              _ShortcutRow(
-                items: const [
-                  _ShortcutItem(
-                    icon: Icons.timeline_outlined,
-                    label: 'Progress',
-                    route: AppRoutes.ownerProgress,
-                  ),
-                  _ShortcutItem(
-                    icon: Icons.photo_library_outlined,
-                    label: 'Photos',
-                    route: AppRoutes.ownerPhotos,
-                  ),
-                  _ShortcutItem(
-                    icon: Icons.inventory_2_outlined,
-                    label: 'Materials',
-                    route: AppRoutes.ownerMaterials,
-                  ),
-                  _ShortcutItem(
-                    icon: Icons.rate_review_outlined,
-                    label: 'Feedback',
-                    route: AppRoutes.ownerFeedback,
-                  ),
-                ],
-              ),
             ],
           ),
         ),
@@ -277,203 +276,73 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   }
 }
 
-class _ProjectStatusHero extends StatelessWidget {
-  const _ProjectStatusHero({
-    required this.project,
-    required this.onViewDetails,
+class _WelcomeHeader extends StatelessWidget {
+  const _WelcomeHeader({
+    required this.theme,
+    required this.name,
+    required this.location,
   });
 
-  final ProjectModel project;
-  final VoidCallback onViewDetails;
+  final ThemeData theme;
+  final String name;
+  final String location;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.primaryContainer],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: AppColors.fluentShadow,
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'My Project Status',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: AppColors.onPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      project.title,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.onPrimaryContainer,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      project.id,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: AppColors.onPrimary.withValues(alpha: 0.85),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ProgressRing(
-                progress: project.progress,
-                size: 88,
-                strokeWidth: 8,
-                progressColor: AppColors.onPrimary,
-                trackColor: AppColors.onPrimary.withValues(alpha: 0.25),
-                centerText: '${(project.progress * 100).round()}%',
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: OutlinedButton(
-              onPressed: onViewDetails,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.onPrimary,
-                side: BorderSide(
-                  color: AppColors.onPrimary.withValues(alpha: 0.6),
-                ),
-                backgroundColor: AppColors.onPrimary.withValues(alpha: 0.12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: Text(
-                'View Project Details',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: AppColors.onPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickInfoTile extends StatelessWidget {
-  const _QuickInfoTile({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.compact = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return FluentCard(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: AppColors.primary, size: 20),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            style: (compact
-                    ? theme.textTheme.bodyMedium
-                    : theme.textTheme.titleMedium)
-                ?.copyWith(fontWeight: FontWeight.w700),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ShortcutItem {
-  const _ShortcutItem({
-    required this.icon,
-    required this.label,
-    required this.route,
-  });
-
-  final IconData icon;
-  final String label;
-  final String route;
-}
-
-class _ShortcutRow extends StatelessWidget {
-  const _ShortcutRow({required this.items});
-
-  final List<_ShortcutItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (var i = 0; i < items.length; i++) ...[
-          if (i > 0) const SizedBox(width: 10),
-          Expanded(
-            child: FluentCard(
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-              onTap: () => Navigator.pushNamed(context, items[i].route),
-              child: Column(
+        Text(
+          'Welcome, $name',
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(items[i].icon, color: AppColors.primary, size: 24),
-                  const SizedBox(height: 8),
+                  const Icon(
+                    Icons.home_outlined,
+                    size: 14,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 4),
                   Text(
-                    items[i].label,
+                    'Home Owner',
                     style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.onSurface,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
                     ),
-                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            const Icon(
+              Icons.location_on_outlined,
+              size: 16,
+              color: AppColors.outline,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                location,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }

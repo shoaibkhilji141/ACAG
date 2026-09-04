@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/constants/app_constants.dart';
 import '../../shared/models/models.dart';
+import '../../shared/services/notification_service.dart';
 import '../../shared/services/project_service.dart';
+import '../../shared/widgets/acag_app_bar.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/empty_placeholder.dart';
 import '../../shared/widgets/progress_ring.dart';
@@ -19,16 +22,30 @@ class MyProjectScreen extends StatefulWidget {
 class _MyProjectScreenState extends State<MyProjectScreen> {
   ProjectModel? _project;
   bool _loading = true;
+  int _unread = 0;
 
   @override
   void initState() {
     super.initState();
+    NotificationService.version.addListener(_loadBadge);
     final cached = ProjectService.cachedOwnerProjects;
     if (cached != null && cached.isNotEmpty) {
       _project = cached.first;
       _loading = false;
     }
     _reload();
+    _loadBadge();
+  }
+
+  @override
+  void dispose() {
+    NotificationService.version.removeListener(_loadBadge);
+    super.dispose();
+  }
+
+  Future<void> _loadBadge() async {
+    final count = await NotificationService.unreadCount();
+    if (mounted) setState(() => _unread = count);
   }
 
   Future<void> _reload() async {
@@ -59,15 +76,13 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(
-          'My House',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: AppColors.primary,
-          ),
-        ),
-        centerTitle: false,
+      appBar: AcagAppBar(
+        title: 'My Project',
+        showBranding: false,
+        notificationCount: _unread,
+        onNotificationTap: () {
+          Navigator.of(context).pushNamed(AppRoutes.ownerNotifications);
+        },
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -115,13 +130,24 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
                                       color: AppColors.onSurfaceVariant,
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    project.statusLabel,
-                                    style: theme.textTheme.labelMedium
-                                        ?.copyWith(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.w700,
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      project.statusLabel,
+                                      style:
+                                          theme.textTheme.labelSmall?.copyWith(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -129,15 +155,14 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
                             ),
                             ProgressRing(
                               progress: project.progress,
-                              size: 84,
+                              size: 88,
                               strokeWidth: 8,
-                              centerText:
-                                  '${(project.progress * 100).round()}%',
+                              centerSubtext: 'Done',
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                       const SectionHeader(title: 'House Information'),
                       const SizedBox(height: 12),
                       FluentCard(
@@ -148,7 +173,7 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
                               label: 'Project / House ID',
                               value: project.id,
                             ),
-                            const Divider(height: 22),
+                            _divider(),
                             _InfoRow(
                               icon: Icons.home_outlined,
                               label: 'House address',
@@ -156,7 +181,7 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
                                   ? '—'
                                   : project.address,
                             ),
-                            const Divider(height: 22),
+                            _divider(),
                             _InfoRow(
                               icon: Icons.location_city_outlined,
                               label: 'City / District / Tehsil',
@@ -171,19 +196,19 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
                                   project.tehsil!,
                               ].join(' / ').ifEmpty('—'),
                             ),
-                            const Divider(height: 22),
+                            _divider(),
                             _InfoRow(
                               icon: Icons.straighten_outlined,
                               label: 'Plot size',
                               value: project.plotSizeLabel ?? '—',
                             ),
-                            const Divider(height: 22),
+                            _divider(),
                             _InfoRow(
                               icon: Icons.crop_square_outlined,
                               label: 'Covered area',
                               value: project.coveredAreaLabel ?? '—',
                             ),
-                            const Divider(height: 22),
+                            _divider(),
                             _InfoRow(
                               icon: Icons.layers_outlined,
                               label: 'Number of floors',
@@ -192,7 +217,7 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                       const SectionHeader(title: 'Schedule & Progress'),
                       const SizedBox(height: 12),
                       FluentCard(
@@ -203,39 +228,38 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
                               label: 'Construction start date',
                               value: project.startDateLabel ?? '—',
                             ),
-                            const Divider(height: 22),
+                            _divider(),
                             _InfoRow(
                               icon: Icons.flag_outlined,
                               label: 'Expected completion date',
                               value: project.estimatedCompletionLabel ?? '—',
                             ),
-                            const Divider(height: 22),
+                            _divider(),
                             _InfoRow(
                               icon: Icons.timeline_outlined,
                               label: 'Current construction stage',
                               value: project.phase,
                             ),
-                            const Divider(height: 22),
+                            _divider(),
                             _InfoRow(
                               icon: Icons.percent_outlined,
                               label: 'Overall completion',
-                              value:
-                                  '${(project.progress * 100).round()}%',
+                              value: '${(project.progress * 100).round()}%',
                             ),
-                            const Divider(height: 22),
+                            _divider(),
                             _InfoRow(
                               icon: Icons.engineering_outlined,
                               label: 'Assigned engineer',
                               value: project.engineerName,
                             ),
-                            const Divider(height: 22),
+                            _divider(),
                             _InfoRow(
                               icon: Icons.event_outlined,
                               label: 'Next visit',
                               value: project.nextInspection,
                             ),
                             if (project.lastVisitLabel != null) ...[
-                              const Divider(height: 22),
+                              _divider(),
                               _InfoRow(
                                 icon: Icons.history_outlined,
                                 label: 'Last visit',
@@ -250,6 +274,11 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
       ),
     );
   }
+
+  Widget _divider() => Divider(
+        height: 22,
+        color: AppColors.outlineVariant.withValues(alpha: 0.35),
+      );
 }
 
 extension on String {
