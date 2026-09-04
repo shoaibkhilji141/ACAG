@@ -28,6 +28,14 @@ class ProjectModel {
     this.imageUrl,
     this.lat = 31.5204,
     this.lng = 74.3587,
+    this.district,
+    this.tehsil,
+    this.plotSizeLabel,
+    this.coveredAreaLabel,
+    this.startDateLabel,
+    this.estimatedCompletionLabel,
+    this.storiesLabel,
+    this.lastVisitLabel,
   });
 
   final String id;
@@ -44,6 +52,14 @@ class ProjectModel {
   final String? imageUrl;
   final double lat;
   final double lng;
+  final String? district;
+  final String? tehsil;
+  final String? plotSizeLabel;
+  final String? coveredAreaLabel;
+  final String? startDateLabel;
+  final String? estimatedCompletionLabel;
+  final String? storiesLabel;
+  final String? lastVisitLabel;
 
   String get statusLabel => switch (status) {
         ProjectStatus.pending => 'Pending',
@@ -51,6 +67,67 @@ class ProjectModel {
         ProjectStatus.completed => 'Completed',
         ProjectStatus.overdue => 'Overdue',
       };
+
+  String get locationLine {
+    final parts = <String>[
+      if (address.trim().isNotEmpty) address.trim(),
+      if (tehsil != null && tehsil!.trim().isNotEmpty) tehsil!.trim(),
+      if (district != null && district!.trim().isNotEmpty) district!.trim(),
+      if (city.trim().isNotEmpty) city.trim(),
+    ];
+    return parts.isEmpty ? '—' : parts.join(', ');
+  }
+
+  ProjectModel copyWith({
+    String? id,
+    String? title,
+    String? address,
+    String? city,
+    String? ownerName,
+    String? ownerPhone,
+    String? engineerName,
+    double? progress,
+    ProjectStatus? status,
+    String? phase,
+    String? nextInspection,
+    String? imageUrl,
+    double? lat,
+    double? lng,
+    String? district,
+    String? tehsil,
+    String? plotSizeLabel,
+    String? coveredAreaLabel,
+    String? startDateLabel,
+    String? estimatedCompletionLabel,
+    String? storiesLabel,
+    String? lastVisitLabel,
+  }) {
+    return ProjectModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      address: address ?? this.address,
+      city: city ?? this.city,
+      ownerName: ownerName ?? this.ownerName,
+      ownerPhone: ownerPhone ?? this.ownerPhone,
+      engineerName: engineerName ?? this.engineerName,
+      progress: progress ?? this.progress,
+      status: status ?? this.status,
+      phase: phase ?? this.phase,
+      nextInspection: nextInspection ?? this.nextInspection,
+      imageUrl: imageUrl ?? this.imageUrl,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
+      district: district ?? this.district,
+      tehsil: tehsil ?? this.tehsil,
+      plotSizeLabel: plotSizeLabel ?? this.plotSizeLabel,
+      coveredAreaLabel: coveredAreaLabel ?? this.coveredAreaLabel,
+      startDateLabel: startDateLabel ?? this.startDateLabel,
+      estimatedCompletionLabel:
+          estimatedCompletionLabel ?? this.estimatedCompletionLabel,
+      storiesLabel: storiesLabel ?? this.storiesLabel,
+      lastVisitLabel: lastVisitLabel ?? this.lastVisitLabel,
+    );
+  }
 }
 
 class NotificationModel {
@@ -59,12 +136,34 @@ class NotificationModel {
     required this.subtitle,
     required this.timeAgo,
     required this.type,
+    this.id,
+    this.isRead = true,
+    this.category,
+    this.projectId,
+    this.createdAt,
   });
 
+  final String? id;
   final String title;
   final String subtitle;
   final String timeAgo;
   final NotificationType type;
+  final bool isRead;
+  final String? category;
+  final String? projectId;
+  final DateTime? createdAt;
+}
+
+class ModuleReportItem {
+  const ModuleReportItem({
+    required this.project,
+    required this.moduleNo,
+    required this.completedAt,
+  });
+
+  final ProjectModel project;
+  final int moduleNo;
+  final DateTime completedAt;
 }
 
 enum NotificationType { warning, info, success }

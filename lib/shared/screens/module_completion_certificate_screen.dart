@@ -95,7 +95,9 @@ class _ModuleCompletionCertificateScreenState
     final project = projectFromRoute(context);
     final moduleNo = moduleNoFromRoute(context) ?? 1;
     final moduleTitle = ModuleCertificate.titleForModule(moduleNo);
-    final completionDate = ModuleCertificate.formatDate(DateTime.now());
+    final completionDate = ModuleCertificate.formatDate(
+      completedAtFromRoute(context) ?? DateTime.now(),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.background,

@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../shared/services/project_service.dart';
 import '../../shared/utils/image_base64.dart';
-import '../../shared/utils/mock_data.dart';
 import '../../shared/widgets/engineer_bottom_nav.dart';
 import '../../theme/app_theme.dart';
 import '../screens/assigned_projects_screen.dart';
@@ -37,6 +36,22 @@ class _EngineerShellState extends State<EngineerShell> {
   final _picker = ImagePicker();
 
   Future<void> _openCamera() async {
+    final projects = ProjectService.cachedAssignedProjects ??
+        await ProjectService.listAssignedProjects();
+    if (!mounted) return;
+
+    if (projects.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No assigned project found for photo upload.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final project = projects.first;
+
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -67,7 +82,6 @@ class _EngineerShellState extends State<EngineerShell> {
     if (picked == null || !mounted) return;
 
     try {
-      final project = MockData.primaryProject;
       final base64 = await encodeFileToBase64(File(picked.path));
       await ProjectService.addProjectImageBase64(
         projectCodeOrId: project.id,
@@ -76,8 +90,8 @@ class _EngineerShellState extends State<EngineerShell> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Photo saved to project images'),
+        SnackBar(
+          content: Text('Photo saved to ${project.id} (visit recorded)'),
           behavior: SnackBarBehavior.floating,
         ),
       );

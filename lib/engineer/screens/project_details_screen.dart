@@ -163,7 +163,9 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
       if (!mounted) return;
       setState(() => _selectedTab = 1);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Image added to project')),
+        const SnackBar(
+          content: Text('Image added — site visit recorded'),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -530,7 +532,7 @@ class _ProjectHero extends StatelessWidget {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          '${project.address}, ${project.city}',
+                          project.locationLine,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: AppColors.onSurfaceVariant,
                           ),
@@ -549,7 +551,7 @@ class _ProjectHero extends StatelessWidget {
                 border: Border.all(color: const Color(0xFFF5D0A0)),
               ),
               child: Text(
-                'PENDING INSPECTION',
+                project.statusLabel.toUpperCase(),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: const Color(0xFFF5A623),
                   fontWeight: FontWeight.w700,
@@ -592,8 +594,8 @@ class _ProjectHero extends StatelessWidget {
                   ),
                   child: const Icon(Icons.home_work_outlined, size: 16),
                 ),
-                label: 'Project Type',
-                value: 'Single Story',
+                label: 'Floors',
+                value: project.storiesLabel ?? '—',
               ),
             ),
           ],
@@ -601,22 +603,60 @@ class _ProjectHero extends StatelessWidget {
         const SizedBox(height: 10),
         Row(
           children: [
-            const Icon(Icons.calendar_today_outlined,
-                size: 16, color: AppColors.outline),
-            const SizedBox(width: 6),
-            Text(
-              'Start Date',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: AppColors.onSurfaceVariant,
+            Expanded(
+              child: _MetaBlock(
+                icon: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainer,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.crop_square_outlined, size: 16),
+                ),
+                label: 'Plot Size',
+                value: project.plotSizeLabel ?? '—',
               ),
             ),
-            const SizedBox(width: 6),
-            Text(
-              '10 Apr 2025',
-              style: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+            Expanded(
+              child: _MetaBlock(
+                icon: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainer,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.aspect_ratio_outlined, size: 16),
+                ),
+                label: 'Covered Area',
+                value: project.coveredAreaLabel ?? '—',
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          children: [
+            _DateChip(
+              label: 'Start',
+              value: project.startDateLabel ?? '—',
+            ),
+            _DateChip(
+              label: 'Expected',
+              value: project.estimatedCompletionLabel ?? '—',
+            ),
+            _DateChip(
+              label: 'Next Visit',
+              value: project.nextInspection,
+            ),
+            if (project.lastVisitLabel != null)
+              _DateChip(
+                label: 'Last Visit',
+                value: project.lastVisitLabel!,
+              ),
           ],
         ),
       ],
@@ -634,6 +674,38 @@ class _ProjectHero extends StatelessWidget {
   static String _shortName(String name) {
     final parts = name.split(' ');
     return parts.length > 1 ? parts.last : name;
+  }
+}
+
+class _DateChip extends StatelessWidget {
+  const _DateChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.calendar_today_outlined,
+            size: 14, color: AppColors.outline),
+        const SizedBox(width: 4),
+        Text(
+          '$label: ',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
   }
 }
 

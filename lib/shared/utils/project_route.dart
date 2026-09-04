@@ -12,6 +12,7 @@ class StitchRouteArgs {
     this.photoPath,
     this.photoPaths = const [],
     this.description,
+    this.completedAt,
   });
 
   final ProjectModel project;
@@ -20,6 +21,7 @@ class StitchRouteArgs {
   final String? photoPath;
   final List<String> photoPaths;
   final String? description;
+  final DateTime? completedAt;
 
   List<String> get effectivePhotoPaths {
     if (photoPaths.isNotEmpty) return photoPaths;
@@ -34,6 +36,7 @@ class StitchRouteArgs {
     String? photoPath,
     List<String>? photoPaths,
     String? description,
+    DateTime? completedAt,
   }) {
     return StitchRouteArgs(
       project: project ?? this.project,
@@ -42,6 +45,7 @@ class StitchRouteArgs {
       photoPath: photoPath ?? this.photoPath,
       photoPaths: photoPaths ?? this.photoPaths,
       description: description ?? this.description,
+      completedAt: completedAt ?? this.completedAt,
     );
   }
 }
@@ -67,4 +71,8 @@ int? stageNoFromRoute(BuildContext context) {
 
 int? moduleNoFromRoute(BuildContext context) {
   return stitchArgsFromRoute(context).moduleNo;
+}
+
+DateTime? completedAtFromRoute(BuildContext context) {
+  return stitchArgsFromRoute(context).completedAt;
 }

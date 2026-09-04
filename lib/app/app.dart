@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../engineer/screens/ai_validation_screen.dart';
 import '../engineer/screens/assigned_projects_screen.dart';
 import '../engineer/screens/camera_screen.dart';
+import '../engineer/screens/engineer_notifications_screen.dart';
 import '../engineer/screens/gps_verification_screen.dart';
 import '../engineer/screens/inspection_report_screen.dart';
 import '../engineer/screens/login_screen.dart';
@@ -58,6 +59,8 @@ class AcagApp extends StatelessWidget {
         AppRoutes.engineerShell: (_) => const EngineerShell(),
         AppRoutes.engineerProjects: (_) => const AssignedProjectsScreen(),
         AppRoutes.engineerProjectDetails: (_) => const ProjectDetailsScreen(),
+        AppRoutes.engineerNotifications: (_) =>
+            const EngineerNotificationsScreen(),
         AppRoutes.engineerGps: (_) => const GpsVerificationScreen(),
         AppRoutes.engineerUpload: (_) => const UploadProgressScreen(),
         AppRoutes.engineerCamera: (_) => const CameraScreen(),

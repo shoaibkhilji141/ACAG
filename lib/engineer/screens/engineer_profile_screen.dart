@@ -153,10 +153,12 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const AcagAppBar(
+      appBar: AcagAppBar(
         title: 'Profile',
         showBranding: false,
-        notificationCount: 0,
+        onNotificationTap: () {
+          Navigator.of(context).pushNamed(AppRoutes.engineerNotifications);
+        },
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -329,7 +331,10 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
                   _SettingsTile(
                     icon: Icons.notifications_outlined,
                     title: 'Notifications',
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.of(context)
+                          .pushNamed(AppRoutes.engineerNotifications);
+                    },
                   ),
                   _divider(),
                   _SettingsTile(

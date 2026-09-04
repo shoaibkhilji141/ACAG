@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/constants/app_constants.dart';
 import '../../shared/models/models.dart';
+import '../../shared/services/notification_service.dart';
 import '../../shared/services/project_service.dart';
 import '../../shared/widgets/acag_app_bar.dart';
 import '../../shared/widgets/project_list_tile.dart';
@@ -20,6 +21,7 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
   ProjectStatus? _filter;
   List<ProjectModel> _projects = [];
   bool _loading = true;
+  int _unread = 0;
 
   static const _filters = <(String, ProjectStatus?)>[
     ('All', null),
@@ -31,18 +33,26 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
   @override
   void initState() {
     super.initState();
+    NotificationService.version.addListener(_loadUnread);
     final cached = ProjectService.cachedAssignedProjects;
     if (cached != null) {
       _projects = cached;
       _loading = false;
     }
     _loadProjects();
+    _loadUnread();
   }
 
   @override
   void dispose() {
+    NotificationService.version.removeListener(_loadUnread);
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadUnread() async {
+    final count = await NotificationService.unreadCount();
+    if (mounted) setState(() => _unread = count);
   }
 
   Future<void> _loadProjects() async {
@@ -83,10 +93,13 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const AcagAppBar(
+      appBar: AcagAppBar(
         title: 'Assigned Projects',
         showBranding: false,
-        notificationCount: 12,
+        notificationCount: _unread,
+        onNotificationTap: () {
+          Navigator.of(context).pushNamed(AppRoutes.engineerNotifications);
+        },
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

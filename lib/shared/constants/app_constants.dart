@@ -37,6 +37,8 @@ class AppRoutes {
   static const engineerCamera = '/engineer/camera';
   static const engineerAi = '/engineer/ai-validation';
   static const engineerReport = '/engineer/report';
+  static const engineerReports = '/engineer/reports';
+  static const engineerNotifications = '/engineer/notifications';
   static const engineerProfile = '/engineer/profile';
   static const projectModule01 = '/project/module-01';
   static const projectModule02 = '/project/module-02';
