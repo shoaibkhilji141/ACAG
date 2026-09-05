@@ -117,6 +117,7 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
       appBar: AcagAppBar(
         title: 'Reports & Documents',
         showBranding: false,
+        showBack: ModalRoute.of(context)?.settings.name == AppRoutes.ownerReports,
         notificationCount: _unread,
         onNotificationTap: () {
           Navigator.of(context).pushNamed(AppRoutes.ownerNotifications);
@@ -241,7 +242,6 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
                       'Module ${report.moduleNo.toString().padLeft(2, '0')} — $title',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
-                        fontSize: 15,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -265,7 +265,6 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: AppColors.success,
                     fontWeight: FontWeight.w700,
-                    fontSize: 10,
                   ),
                 ),
               ),
@@ -303,6 +302,18 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
         final notes = (doc['notes'] as String?)?.trim() ?? '';
 
         return FluentCard(
+          onTap: () {
+            final id = doc['id'] as String?;
+            if (id == null) return;
+            Navigator.of(context).pushNamed(
+              AppRoutes.documentViewer,
+              arguments: {
+                'documentId': id,
+                'title': doc['title'] as String? ?? 'Document',
+                'docType': type,
+              },
+            );
+          },
           padding: const EdgeInsets.all(16),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -326,14 +337,14 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
                   children: [
                     Text(
                       doc['title'] as String? ?? 'Document',
-                      style: theme.textTheme.titleSmall?.copyWith(
+                      style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _docTypeIconLabel(type),
-                      style: theme.textTheme.labelSmall?.copyWith(
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: AppColors.onSurfaceVariant,
                       ),
                     ),
@@ -360,10 +371,11 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: _docStatusColor(status),
                     fontWeight: FontWeight.w700,
-                    fontSize: 10,
                   ),
                 ),
               ),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, color: AppColors.outline),
             ],
           ),
         );

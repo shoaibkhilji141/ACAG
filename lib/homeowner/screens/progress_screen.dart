@@ -118,6 +118,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
       appBar: AcagAppBar(
         title: 'Construction Progress',
         showBranding: false,
+        showBack: true,
         notificationCount: _unread,
         onNotificationTap: () {
           Navigator.of(context).pushNamed(AppRoutes.ownerNotifications);

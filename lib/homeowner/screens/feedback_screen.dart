@@ -117,6 +117,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       appBar: AcagAppBar(
         title: 'Feedback',
         showBranding: false,
+        showBack: true,
         notificationCount: _unread,
         onNotificationTap: () {
           Navigator.of(context).pushNamed(AppRoutes.ownerNotifications);
@@ -129,7 +130,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           children: [
             Text(
               'How was your experience?',
-              style: theme.textTheme.headlineMedium?.copyWith(
+              style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
             ),

@@ -45,10 +45,11 @@ class ProjectService {
       final projects = await listOwnerProjects();
       if (projects.isEmpty) return;
       final primary = projects.first;
-      await fetchDetailsBundle(primary.id, fallbackProject: primary);
-      // Fire-and-forget secondary lists.
-      listOwnerModuleReports();
-      listEngineerVisits(primary.id);
+      await Future.wait([
+        fetchDetailsBundle(primary.id, fallbackProject: primary),
+        listOwnerModuleReports(),
+        listEngineerVisits(primary.id),
+      ]);
     } catch (e) {
       debugPrint('prefetchOwnerHub: $e');
     }

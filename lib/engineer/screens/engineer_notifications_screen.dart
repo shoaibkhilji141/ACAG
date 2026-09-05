@@ -66,6 +66,7 @@ class _EngineerNotificationsScreenState
       appBar: AcagAppBar(
         title: 'Notifications',
         showBranding: false,
+        showBack: true,
         notificationCount: unread,
       ),
       body: Column(

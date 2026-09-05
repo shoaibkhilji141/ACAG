@@ -15,6 +15,8 @@ class AcagAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.onAvatarTap,
     this.title,
     this.showBranding = true,
+    this.showBack = false,
+    this.onBack,
   });
 
   final VoidCallback? onNotificationTap;
@@ -24,6 +26,8 @@ class AcagAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onAvatarTap;
   final String? title;
   final bool showBranding;
+  final bool showBack;
+  final VoidCallback? onBack;
 
   @override
   Size get preferredSize => const Size.fromHeight(64);
@@ -31,6 +35,8 @@ class AcagAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final canPop = Navigator.of(context).canPop();
+    final showLeading = showBack && canPop;
 
     return AppBar(
       elevation: 0,
@@ -41,10 +47,18 @@ class AcagAppBar extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: false,
       titleSpacing: 0,
       title: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Row(
           children: [
-            const SizedBox(width: 8),
+            if (showLeading)
+              IconButton(
+                onPressed: onBack ?? () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.arrow_back),
+                color: AppColors.onSurface,
+                tooltip: 'Back',
+              )
+            else
+              const SizedBox(width: 8),
             if (showBranding) ...[
               Container(
                 width: 36,
@@ -152,7 +166,6 @@ class _NotificationButton extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: Colors.white,
-                      fontSize: 9,
                       fontWeight: FontWeight.w700,
                       height: 1.2,
                     ),

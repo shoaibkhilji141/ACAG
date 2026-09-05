@@ -77,6 +77,7 @@ class AppRoutes {
   static const ownerComplaints = '/owner/complaints';
   static const ownerComplaintCreate = '/owner/complaints/create';
   static const ownerProfile = '/owner/profile';
+  static const documentViewer = '/documents/viewer';
 }
 
 enum UserRole { engineer, owner }

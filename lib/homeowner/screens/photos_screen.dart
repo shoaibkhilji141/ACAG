@@ -105,6 +105,7 @@ class _PhotosScreenState extends State<PhotosScreen> {
       appBar: AcagAppBar(
         title: 'Site Photos',
         showBranding: false,
+        showBack: true,
         notificationCount: _unread,
         onNotificationTap: () {
           Navigator.of(context).pushNamed(AppRoutes.ownerNotifications);

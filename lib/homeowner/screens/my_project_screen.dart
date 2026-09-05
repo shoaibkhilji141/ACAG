@@ -139,6 +139,7 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
       appBar: AcagAppBar(
         title: 'Project Details',
         showBranding: false,
+        showBack: ModalRoute.of(context)?.settings.name == AppRoutes.ownerProject,
         notificationCount: _unread,
         onNotificationTap: () {
           Navigator.of(context).pushNamed(AppRoutes.ownerNotifications);
@@ -236,6 +237,16 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
                                 color: AppColors.primary,
                                 onTap: () => Navigator.of(context).pushNamed(
                                   AppRoutes.ownerVisits,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _ActionRow(
+                                icon: Icons.folder_outlined,
+                                title: 'Documents',
+                                subtitle: 'CNIC, plans, NOC & certificates',
+                                color: const Color(0xFF0F766E),
+                                onTap: () => Navigator.of(context).pushNamed(
+                                  AppRoutes.ownerReports,
                                 ),
                               ),
                               const SizedBox(height: 8),

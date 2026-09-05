@@ -4,7 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../shared/constants/app_constants.dart';
+import '../../shared/screens/document_viewer_screen.dart';
 import '../../shared/services/auth_service.dart';
+import '../../shared/services/notification_service.dart';
+import '../../shared/services/owner_service.dart';
+import '../../shared/services/project_service.dart';
 import '../../shared/utils/image_base64.dart';
 import '../../shared/utils/mock_data.dart';
 import '../../shared/widgets/acag_app_bar.dart';
@@ -27,15 +31,39 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
   String? _imageUrl;
   File? _localImage;
   bool _uploading = false;
+  int _unread = 0;
+  int _assignedCount = 0;
+  List<Map<String, dynamic>> _documents = const [];
+  bool _docsLoading = true;
 
   @override
   void initState() {
     super.initState();
+    NotificationService.version.addListener(_loadBadge);
+    _loadBadge();
     _loadProfile();
   }
 
+  @override
+  void dispose() {
+    NotificationService.version.removeListener(_loadBadge);
+    super.dispose();
+  }
+
+  Future<void> _loadBadge() async {
+    final count = await NotificationService.unreadCount();
+    if (mounted) setState(() => _unread = count);
+  }
+
   Future<void> _loadProfile() async {
-    final profile = await AuthService.currentProfile();
+    final profileFuture = AuthService.currentProfile();
+    final projectsFuture = ProjectService.listAssignedProjects();
+    final profile = await profileFuture;
+    final projects = await projectsFuture;
+    final docs = projects.isEmpty
+        ? <Map<String, dynamic>>[]
+        : await OwnerService.listDocuments(projects.first.id);
+
     if (!mounted) return;
     setState(() {
       _name = profile?['full_name'] as String? ?? MockData.engineerName;
@@ -44,6 +72,9 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
           profile?['location_text'] as String? ?? MockData.engineerLocation;
       _imageUrl = profile?['profile_image_base64'] as String? ??
           profile?['profile_image_url'] as String?;
+      _assignedCount = projects.length;
+      _documents = docs;
+      _docsLoading = false;
     });
   }
 
@@ -145,8 +176,8 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
         .map((p) => p[0].toUpperCase())
         .join();
 
-    const stats = [
-      (label: 'Assigned', value: '1'),
+    final stats = [
+      (label: 'Assigned', value: '$_assignedCount'),
       (label: 'Completed', value: '0'),
       (label: 'Rating', value: '—'),
     ];
@@ -156,6 +187,7 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
       appBar: AcagAppBar(
         title: 'Profile',
         showBranding: false,
+        notificationCount: _unread,
         onNotificationTap: () {
           Navigator.of(context).pushNamed(AppRoutes.engineerNotifications);
         },
@@ -290,7 +322,7 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
                         children: [
                           Text(
                             stats[i].value,
-                            style: theme.textTheme.headlineMedium?.copyWith(
+                            style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w800,
                               color: AppColors.primary,
                             ),
@@ -306,6 +338,22 @@ class _EngineerProfileScreenState extends State<EngineerProfileScreen> {
                   ),
                 ],
               ],
+            ),
+            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Documents',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ProfileDocumentsSection(
+              documents: _documents,
+              loading: _docsLoading,
+              emptyMessage: 'No documents for assigned projects yet.',
             ),
             const SizedBox(height: 24),
             Align(

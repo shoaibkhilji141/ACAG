@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../shared/services/project_service.dart';
 import '../../shared/services/notification_service.dart';
+import '../../shared/services/owner_service.dart';
 import '../../shared/utils/image_base64.dart';
 import '../../shared/widgets/engineer_bottom_nav.dart';
 import '../../theme/app_theme.dart';
@@ -26,7 +27,11 @@ class _EngineerShellState extends State<EngineerShell> {
   @override
   void initState() {
     super.initState();
-    ProjectService.listAssignedProjects();
+    ProjectService.listAssignedProjects().then((projects) {
+      if (projects.isEmpty) return;
+      ProjectService.prefetchDetails(projects.first.id);
+      OwnerService.listDocuments(projects.first.id);
+    });
     NotificationService.startPolling(
       interval: const Duration(seconds: 15),
     );

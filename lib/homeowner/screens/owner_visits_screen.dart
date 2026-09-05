@@ -201,6 +201,7 @@ class _OwnerVisitsScreenState extends State<OwnerVisitsScreen> {
       appBar: AcagAppBar(
         title: 'Engineer Visits',
         showBranding: false,
+        showBack: true,
         notificationCount: _unread,
         onNotificationTap: () {
           Navigator.of(context).pushNamed(AppRoutes.ownerNotifications);

@@ -25,6 +25,7 @@ import '../homeowner/shell/owner_shell.dart';
 import '../shared/constants/app_constants.dart';
 import '../shared/constants/construction_modules.dart';
 import '../shared/screens/construction_module_screen.dart';
+import '../shared/screens/document_viewer_screen.dart';
 import '../modules/module_01/plot_dimensions_screen.dart';
 import '../modules/module_01/room_requirements_screen.dart';
 import '../modules/module_01/generated_floor_plans_screen.dart';
@@ -116,6 +117,7 @@ class AcagApp extends StatelessWidget {
         AppRoutes.ownerComplaints: (_) => const OwnerComplaintsScreen(),
         AppRoutes.ownerComplaintCreate: (_) =>
             const OwnerComplaintCreateScreen(),
+        AppRoutes.documentViewer: (_) => const DocumentViewerScreen(),
       },
     );
   }

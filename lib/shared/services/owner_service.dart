@@ -23,6 +23,12 @@ class OwnerService {
     }
   }
 
+  static List<Map<String, dynamic>>? cachedDocuments(String projectCode) =>
+      _docsCache[projectCode];
+
+  static List<Map<String, dynamic>>? cachedComplaints(String projectCode) =>
+      _complaintsCache[projectCode];
+
   // ── Feedback / ratings ─────────────────────────────────────
 
   static Future<void> submitFeedback({
@@ -48,6 +54,7 @@ class OwnerService {
       'comments': comments?.trim().isEmpty == true ? null : comments?.trim(),
     });
 
+    // Notify only the assigned engineer for this owner's project.
     await NotificationService.notifyProjectParties(
       projectUuid: uuid,
       title: 'New owner feedback',
@@ -62,6 +69,7 @@ class OwnerService {
 
   // ── Documents ──────────────────────────────────────────────
 
+  /// Lightweight list (no heavy base64 payloads) for fast screens.
   static Future<List<Map<String, dynamic>>> listDocuments(
     String projectCodeOrId, {
     bool forceRefresh = false,
@@ -75,7 +83,10 @@ class OwnerService {
     try {
       final rows = await _client
           .from('project_documents')
-          .select()
+          .select(
+            'id, project_id, doc_type, title, status, notes, '
+            'uploaded_by, created_at, updated_at',
+          )
           .eq('project_id', uuid)
           .order('created_at', ascending: false);
       final list = List<Map<String, dynamic>>.from(rows as List);
@@ -84,6 +95,21 @@ class OwnerService {
     } catch (e) {
       debugPrint('OwnerService.listDocuments: $e');
       return _docsCache[projectCodeOrId] ?? const [];
+    }
+  }
+
+  /// Full document including image payloads (open viewer only).
+  static Future<Map<String, dynamic>?> getDocument(String documentId) async {
+    try {
+      final row = await _client
+          .from('project_documents')
+          .select()
+          .eq('id', documentId)
+          .maybeSingle();
+      return row == null ? null : Map<String, dynamic>.from(row);
+    } catch (e) {
+      debugPrint('OwnerService.getDocument: $e');
+      return null;
     }
   }
 
@@ -148,12 +174,15 @@ class OwnerService {
 
     invalidateCaches(projectCodeOrId);
 
+    // Notify only the assigned engineer (not the owner who just submitted).
     await NotificationService.notifyProjectParties(
       projectUuid: uuid,
       title: 'New complaint submitted',
       body: '$category — ${description.trim()}',
       type: 'warning',
       category: 'complaint_update',
+      includeOwner: false,
+      includeEngineer: true,
     );
   }
 }

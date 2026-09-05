@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/services/auth_service.dart';
 import '../../shared/services/notification_service.dart';
+import '../../shared/services/owner_service.dart';
 import '../../shared/services/project_service.dart';
 import '../../shared/widgets/owner_bottom_nav.dart';
 import '../../theme/app_theme.dart';
@@ -34,8 +35,15 @@ class _OwnerShellState extends State<OwnerShell> {
     NotificationService.startPolling(
       interval: const Duration(seconds: 15),
     );
-    // Prefetch project bundle / visits / reports in background.
-    ProjectService.prefetchOwnerHub();
+    // Prefetch project bundle / visits / reports / docs in background.
+    ProjectService.prefetchOwnerHub().then((_) async {
+      final project = await ProjectService.primaryOwnerProject();
+      if (project == null) return;
+      await Future.wait([
+        OwnerService.listDocuments(project.id),
+        OwnerService.listComplaints(project.id),
+      ]);
+    });
   }
 
   @override

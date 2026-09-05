@@ -59,6 +59,19 @@ class _OwnerComplaintsScreenState extends State<OwnerComplaintsScreen> {
       }
       return;
     }
+
+    // Cache-first: paint immediately if warm, then refresh quietly.
+    if (!force) {
+      final cached = OwnerService.cachedComplaints(project.id);
+      if (cached != null && mounted) {
+        setState(() {
+          _projectId = project.id;
+          _items = cached;
+          _loading = false;
+        });
+      }
+    }
+
     final rows = await OwnerService.listComplaints(
       project.id,
       forceRefresh: force,
@@ -221,6 +234,7 @@ class _OwnerComplaintsScreenState extends State<OwnerComplaintsScreen> {
       appBar: AcagAppBar(
         title: 'Complaints',
         showBranding: false,
+        showBack: true,
         notificationCount: _unread,
         onNotificationTap: () {
           Navigator.of(context).pushNamed(AppRoutes.ownerNotifications);
@@ -441,6 +455,7 @@ class _OwnerComplaintCreateScreenState
       appBar: AcagAppBar(
         title: 'New Complaint',
         showBranding: false,
+        showBack: true,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),

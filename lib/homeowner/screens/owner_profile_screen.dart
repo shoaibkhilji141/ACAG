@@ -5,8 +5,10 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../shared/constants/app_constants.dart';
 import '../../shared/models/models.dart';
+import '../../shared/screens/document_viewer_screen.dart';
 import '../../shared/services/auth_service.dart';
 import '../../shared/services/notification_service.dart';
+import '../../shared/services/owner_service.dart';
 import '../../shared/services/project_service.dart';
 import '../../shared/utils/image_base64.dart';
 import '../../shared/widgets/acag_app_bar.dart';
@@ -34,6 +36,8 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   File? _localImage;
   bool _uploading = false;
   int _unread = 0;
+  List<Map<String, dynamic>> _documents = const [];
+  bool _docsLoading = true;
 
   @override
   void initState() {
@@ -71,10 +75,15 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   Future<void> _load() async {
     final profile = await AuthService.currentProfile();
     final project = await ProjectService.primaryOwnerProject();
+    final docs = project == null
+        ? <Map<String, dynamic>>[]
+        : await OwnerService.listDocuments(project.id);
     if (!mounted) return;
     setState(() {
       if (profile != null) _applyProfile(profile);
       _project = project;
+      _documents = docs;
+      _docsLoading = false;
     });
   }
 
@@ -380,6 +389,22 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                   _DetailRow(label: 'Account status', value: statusLabel),
                 ],
               ),
+            ),
+            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Documents',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ProfileDocumentsSection(
+              documents: _documents,
+              loading: _docsLoading,
+              emptyMessage: 'No project documents on file yet.',
             ),
             const SizedBox(height: 24),
             Align(
