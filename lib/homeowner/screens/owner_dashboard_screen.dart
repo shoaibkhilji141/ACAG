@@ -154,7 +154,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       icon: Icons.fact_check_outlined,
                       onTap: () {
                         Navigator.of(context)
-                            .pushNamed(AppRoutes.ownerProject);
+                            .pushNamed(AppRoutes.ownerVisits);
                       },
                     ),
                     KpiCard(

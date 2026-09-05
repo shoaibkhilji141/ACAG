@@ -30,12 +30,12 @@ class _OwnerShellState extends State<OwnerShell> {
   @override
   void initState() {
     super.initState();
-    // Warm caches + start 15s notification polling.
-    ProjectService.listOwnerProjects();
     AuthService.currentProfile();
     NotificationService.startPolling(
       interval: const Duration(seconds: 15),
     );
+    // Prefetch project bundle / visits / reports in background.
+    ProjectService.prefetchOwnerHub();
   }
 
   @override

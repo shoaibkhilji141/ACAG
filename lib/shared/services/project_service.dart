@@ -22,6 +22,7 @@ class ProjectService {
 
   static final Map<String, String> _uuidCache = {};
   static final Map<String, ProjectDetailsBundle> _bundleCache = {};
+  static final Map<String, List<Map<String, dynamic>>> _visitsCache = {};
   static List<ProjectModel>? _assignedProjectsCache;
   static List<ProjectModel>? _ownerProjectsCache;
 
@@ -31,15 +32,35 @@ class ProjectService {
   static ProjectDetailsBundle? getCachedBundle(String projectCode) =>
       _bundleCache[projectCode];
 
+  static List<Map<String, dynamic>>? getCachedVisits(String projectCode) =>
+      _visitsCache[projectCode];
+
   static void prefetchDetails(String projectCode) {
     fetchDetailsBundle(projectCode);
+  }
+
+  /// Warm owner hub caches in the background (dashboard / project / reports).
+  static Future<void> prefetchOwnerHub() async {
+    try {
+      final projects = await listOwnerProjects();
+      if (projects.isEmpty) return;
+      final primary = projects.first;
+      await fetchDetailsBundle(primary.id, fallbackProject: primary);
+      // Fire-and-forget secondary lists.
+      listOwnerModuleReports();
+      listEngineerVisits(primary.id);
+    } catch (e) {
+      debugPrint('prefetchOwnerHub: $e');
+    }
   }
 
   static void invalidateProjectCache([String? projectCode]) {
     if (projectCode != null) {
       _bundleCache.remove(projectCode);
+      _visitsCache.remove(projectCode);
     } else {
       _bundleCache.clear();
+      _visitsCache.clear();
     }
     _assignedProjectsCache = null;
     _ownerProjectsCache = null;
@@ -528,18 +549,26 @@ class ProjectService {
   static Future<ProjectDetailsBundle> fetchDetailsBundle(
     String projectCodeOrId, {
     ProjectModel? fallbackProject,
+    bool forceRefresh = false,
   }) async {
     final fallback = fallbackProject ?? MockData.primaryProject;
+    final cacheKey = fallbackProject?.id ?? projectCodeOrId;
+    final cached = _bundleCache[cacheKey] ?? _bundleCache[projectCodeOrId];
+    if (!forceRefresh && cached != null && cached.isFresh()) {
+      return cached;
+    }
 
     try {
       final row = await _fetchProjectRow(projectCodeOrId);
       if (row == null) {
-        return ProjectDetailsBundle(
-          project: fallback,
-          moduleDone: const {},
-          images: const [],
-          materials: const [],
-        );
+        return cached ??
+            ProjectDetailsBundle(
+              project: fallback,
+              moduleDone: const {},
+              images: const [],
+              materials: const [],
+              cachedAt: DateTime.now(),
+            );
       }
 
       final project = projectFromRow(row);
@@ -553,8 +582,9 @@ class ProjectService {
         _imagesForUuid(uuid),
         _materialLinesForUuid(uuid),
         _plotForUuid(uuid),
-        _constructionStagesForUuid(uuid),
+        _constructionStagesLiteForUuid(uuid),
         _storiesCountForUuid(uuid),
+        _visitsForUuid(uuid),
       ]);
 
       final storiesCount = results[5] as int?;
@@ -564,6 +594,9 @@ class ProjectService {
               ? 'Single Story'
               : '$storiesCount Stories';
 
+      final visits = results[6] as List<Map<String, dynamic>>;
+      _visitsCache[code] = visits;
+
       final bundle = ProjectDetailsBundle(
         project: project.copyWith(storiesLabel: storiesLabel),
         moduleDone: results[0] as Map<int, bool>,
@@ -572,17 +605,20 @@ class ProjectService {
         plot: results[3] as Map<String, dynamic>?,
         ownerPhone: _phoneFromRow(row) ?? project.ownerPhone,
         constructionStages: results[4] as List<Map<String, dynamic>>,
+        visits: visits,
+        cachedAt: DateTime.now(),
       );
       _bundleCache[code] = bundle;
       return bundle;
     } catch (e) {
       debugPrint('fetchDetailsBundle: $e');
-      return _bundleCache[projectCodeOrId] ??
+      return cached ??
           ProjectDetailsBundle(
             project: fallback,
             moduleDone: const {},
             images: const [],
             materials: const [],
+            cachedAt: DateTime.now(),
           );
     }
   }
@@ -606,9 +642,12 @@ class ProjectService {
   static Future<List<Map<String, dynamic>>> _imagesForUuid(String uuid) async {
     final rows = await _client
         .from('project_images')
-        .select('id, image_base64, caption, created_at')
+        .select(
+          'id, image_base64, caption, created_at, uploaded_by, uploader:uploaded_by(full_name)',
+        )
         .eq('project_id', uuid)
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        .limit(40);
     return List<Map<String, dynamic>>.from(rows as List);
   }
 
@@ -697,19 +736,76 @@ class ProjectService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> listProjectImages(
-    String projectCodeOrId,
+  /// Lightweight stage rows for timeline (no heavy base64 blobs).
+  static Future<List<Map<String, dynamic>>> _constructionStagesLiteForUuid(
+    String uuid,
   ) async {
+    try {
+      final rows = await _client
+          .from('module04_construction_stages')
+          .select(
+            'id, stage_no, stage_name, description, completed_at, completed_by',
+          )
+          .eq('project_id', uuid)
+          .order('stage_no');
+      return List<Map<String, dynamic>>.from(rows as List);
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST205' ||
+          e.message.contains('module04_construction_stages')) {
+        return [];
+      }
+      rethrow;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> _visitsForUuid(String uuid) async {
+    try {
+      final rows = await _client
+          .from('engineer_visits')
+          .select(
+            'id, visited_at, next_visit_at, trigger_source, notes, engineer_id, engineer:engineer_id(full_name)',
+          )
+          .eq('project_id', uuid)
+          .order('visited_at', ascending: false)
+          .limit(50);
+      return List<Map<String, dynamic>>.from(rows as List);
+    } catch (e) {
+      debugPrint('_visitsForUuid: $e');
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> listEngineerVisits(
+    String projectCodeOrId, {
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh) {
+      final cached = _visitsCache[projectCodeOrId] ??
+          getCachedBundle(projectCodeOrId)?.visits;
+      if (cached != null) return cached;
+    }
+    final uuid = await resolveProjectUuid(projectCodeOrId);
+    if (uuid == null) return [];
+    final rows = await _visitsForUuid(uuid);
+    _visitsCache[projectCodeOrId] = rows;
+    final code = getCachedBundle(projectCodeOrId)?.project.id;
+    if (code != null) _visitsCache[code] = rows;
+    return rows;
+  }
+
+  static Future<List<Map<String, dynamic>>> listProjectImages(
+    String projectCodeOrId, {
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh) {
+      final cached = getCachedBundle(projectCodeOrId)?.images;
+      if (cached != null) return cached;
+    }
     final uuid = await resolveProjectUuid(projectCodeOrId);
     if (uuid == null) return [];
 
-    final rows = await _client
-        .from('project_images')
-        .select('id, image_base64, caption, created_at')
-        .eq('project_id', uuid)
-        .order('created_at', ascending: false);
-
-    return List<Map<String, dynamic>>.from(rows as List);
+    final rows = await _imagesForUuid(uuid);
+    return rows;
   }
 
   static Future<void> addProjectImageBase64({

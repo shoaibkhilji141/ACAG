@@ -10,6 +10,8 @@ class ProjectDetailsBundle {
     this.plot,
     this.ownerPhone,
     this.constructionStages = const [],
+    this.visits = const [],
+    this.cachedAt,
   });
 
   final ProjectModel project;
@@ -19,4 +21,11 @@ class ProjectDetailsBundle {
   final Map<String, dynamic>? plot;
   final String? ownerPhone;
   final List<Map<String, dynamic>> constructionStages;
+  final List<Map<String, dynamic>> visits;
+  final DateTime? cachedAt;
+
+  bool isFresh([Duration ttl = const Duration(seconds: 45)]) {
+    if (cachedAt == null) return false;
+    return DateTime.now().difference(cachedAt!) < ttl;
+  }
 }

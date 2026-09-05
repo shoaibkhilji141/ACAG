@@ -69,6 +69,7 @@ class AppRoutes {
   static const ownerProject = '/owner/project';
   static const ownerProgress = '/owner/progress';
   static const ownerPhotos = '/owner/photos';
+  static const ownerVisits = '/owner/visits';
   static const ownerMaterials = '/owner/materials';
   static const ownerReports = '/owner/reports';
   static const ownerNotifications = '/owner/notifications';
