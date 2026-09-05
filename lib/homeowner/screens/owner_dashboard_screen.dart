@@ -247,6 +247,39 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     ),
                   ),
                 const SizedBox(height: 28),
+                const SectionHeader(title: 'Shortcuts'),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ShortcutCard(
+                        icon: Icons.rate_review_outlined,
+                        label: 'Feedback',
+                        onTap: () => Navigator.of(context)
+                            .pushNamed(AppRoutes.ownerFeedback),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _ShortcutCard(
+                        icon: Icons.report_problem_outlined,
+                        label: 'Complaints',
+                        onTap: () => Navigator.of(context)
+                            .pushNamed(AppRoutes.ownerComplaints),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _ShortcutCard(
+                        icon: Icons.folder_outlined,
+                        label: 'Documents',
+                        onTap: () => Navigator.of(context)
+                            .pushNamed(AppRoutes.ownerReports),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
                 SectionHeader(
                   title: 'Recent Notifications',
                   actionLabel: 'View All',
@@ -271,6 +304,41 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+class _ShortcutCard extends StatelessWidget {
+  const _ShortcutCard({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FluentCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      child: Column(
+        children: [
+          Icon(icon, color: AppColors.primary, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }

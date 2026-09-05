@@ -16,6 +16,7 @@ import '../homeowner/screens/feedback_screen.dart';
 import '../homeowner/screens/materials_screen.dart';
 import '../homeowner/screens/my_project_screen.dart';
 import '../homeowner/screens/notifications_screen.dart';
+import '../homeowner/screens/owner_complaints_screen.dart';
 import '../homeowner/screens/owner_reports_screen.dart';
 import '../homeowner/screens/owner_visits_screen.dart';
 import '../homeowner/screens/photos_screen.dart';
@@ -112,6 +113,9 @@ class AcagApp extends StatelessWidget {
         AppRoutes.ownerReports: (_) => const OwnerReportsScreen(),
         AppRoutes.ownerNotifications: (_) => const NotificationsScreen(),
         AppRoutes.ownerFeedback: (_) => const FeedbackScreen(),
+        AppRoutes.ownerComplaints: (_) => const OwnerComplaintsScreen(),
+        AppRoutes.ownerComplaintCreate: (_) =>
+            const OwnerComplaintCreateScreen(),
       },
     );
   }

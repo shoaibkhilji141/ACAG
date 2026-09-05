@@ -238,6 +238,26 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
                                   AppRoutes.ownerVisits,
                                 ),
                               ),
+                              const SizedBox(height: 8),
+                              _ActionRow(
+                                icon: Icons.report_problem_outlined,
+                                title: 'Complaints / Issues',
+                                subtitle: 'Submit and track site issues',
+                                color: const Color(0xFFDC2626),
+                                onTap: () => Navigator.of(context).pushNamed(
+                                  AppRoutes.ownerComplaints,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _ActionRow(
+                                icon: Icons.rate_review_outlined,
+                                title: 'Feedback & Rating',
+                                subtitle: 'Rate your ACAG experience',
+                                color: const Color(0xFF7C3AED),
+                                onTap: () => Navigator.of(context).pushNamed(
+                                  AppRoutes.ownerFeedback,
+                                ),
+                              ),
                               const SizedBox(height: 16),
                               Text(
                                 'Modules Status',

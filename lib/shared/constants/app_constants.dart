@@ -74,6 +74,8 @@ class AppRoutes {
   static const ownerReports = '/owner/reports';
   static const ownerNotifications = '/owner/notifications';
   static const ownerFeedback = '/owner/feedback';
+  static const ownerComplaints = '/owner/complaints';
+  static const ownerComplaintCreate = '/owner/complaints/create';
   static const ownerProfile = '/owner/profile';
 }
 
