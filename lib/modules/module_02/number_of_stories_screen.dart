@@ -21,8 +21,6 @@ class _NumberOfStoriesScreenState extends State<NumberOfStoriesScreen> {
 
   static const _options = [
     (count: 1, label: 'Single Story', desc: 'Ground floor only — ideal for 5–10 marla plots'),
-    (count: 2, label: 'Double Story', desc: 'Ground + first floor — most common in Punjab'),
-    (count: 3, label: 'Triple Story', desc: 'Ground + two upper floors — larger plots'),
   ];
 
   @override
@@ -109,7 +107,7 @@ class _NumberOfStoriesScreenState extends State<NumberOfStoriesScreen> {
           const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(3, (i) {
+            children: List.generate(1, (i) {
               final count = i + 1;
               final selected = _stories == count;
               return Expanded(

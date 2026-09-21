@@ -1162,22 +1162,25 @@ class ProjectService {
     required double cementBags,
     required double steelTons,
     required double sandUnits,
+    double? crushUnits,
     double? basedOnPlotArea,
     int? basedOnStories,
   }) async {
     final uuid = await _requireUuid(projectCodeOrId);
+    final data = <String, dynamic>{
+      'project_id': uuid,
+      'based_on_plot_area': basedOnPlotArea,
+      'based_on_stories': basedOnStories,
+      'bricks_qty': bricksQty,
+      'cement_bags': cementBags,
+      'steel_tons': steelTons,
+      'sand_units': sandUnits,
+      'saved_by': _userId,
+      'saved_at': DateTime.now().toIso8601String(),
+    };
+    if (crushUnits != null) data['crush_units'] = crushUnits;
     await _client.from('module03_material_estimates').upsert(
-      {
-        'project_id': uuid,
-        'based_on_plot_area': basedOnPlotArea,
-        'based_on_stories': basedOnStories,
-        'bricks_qty': bricksQty,
-        'cement_bags': cementBags,
-        'steel_tons': steelTons,
-        'sand_units': sandUnits,
-        'saved_by': _userId,
-        'saved_at': DateTime.now().toIso8601String(),
-      },
+      data,
       onConflict: 'project_id',
     );
   }

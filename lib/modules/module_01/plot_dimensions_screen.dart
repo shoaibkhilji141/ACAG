@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/planner_service.dart';
 import '../../shared/services/project_service.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
@@ -22,8 +23,8 @@ class _PlotDimensionsScreenState extends State<PlotDimensionsScreen> {
   bool _loading = true;
   bool _saving = false;
 
-  static const _units = ['Feet', 'Meters', 'Marla'];
-  static const _unitKeys = ['feet', 'meters', 'marla'];
+  static const _units = ['Feet', 'Meters'];
+  static const _unitKeys = ['feet', 'meters'];
   static const _zones = [
     ('Punjab Plains', 'Lahore, Multan, Faisalabad', 'Flat / Modern'),
     ('Northern Areas', 'Murree, Abbottabad, Swat', 'Sloped Roof'),
@@ -40,6 +41,7 @@ class _PlotDimensionsScreenState extends State<PlotDimensionsScreen> {
   @override
   void initState() {
     super.initState();
+    PlannerService.wake(); // fire-and-forget: wake the server while engineer types
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -79,6 +81,9 @@ class _PlotDimensionsScreenState extends State<PlotDimensionsScreen> {
   double get _area {
     final length = double.tryParse(_lengthController.text) ?? 0;
     final width = double.tryParse(_widthController.text) ?? 0;
+    if (_unitKeys[_unitIndex] == 'meters') {
+      return (length * 3.28084) * (width * 3.28084);
+    }
     return length * width;
   }
 
@@ -221,7 +226,7 @@ class _PlotDimensionsScreenState extends State<PlotDimensionsScreen> {
                             const SizedBox(height: 4),
                             Text(
                               _area > 0
-                                  ? '${_area == _area.roundToDouble() ? _area.round() : _area.toStringAsFixed(1)} sq.ft'
+                                  ? '${_area.round()} sq.ft (${(_area / 272.25).toStringAsFixed(1)} Marla)'
                                   : '—',
                               style: theme.textTheme.headlineSmall?.copyWith(
                                 color: AppColors.primary,

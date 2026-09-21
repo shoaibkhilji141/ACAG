@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/planner_service.dart';
 import '../../shared/services/project_service.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
+import '../../shared/widgets/zoomable_image.dart';
 import '../../theme/app_theme.dart';
 
 class GeneratedFloorPlansScreen extends StatefulWidget {
@@ -20,22 +22,8 @@ class _GeneratedFloorPlansScreenState extends State<GeneratedFloorPlansScreen> {
   bool _loading = true;
   bool _saving = false;
 
-  static const _plans = [
-    (
-      key: 'plan_a_compact',
-      name: 'Plan A — Compact Layout',
-      area: '1,850 sq.ft',
-      rooms: ['Bed 1', 'Bed 2', 'Bed 3', 'Bath', 'Kitchen', 'Living'],
-      badge: 'Recommended',
-    ),
-    (
-      key: 'plan_b_open',
-      name: 'Plan B — Open Living',
-      area: '1,920 sq.ft',
-      rooms: ['Master', 'Bed 2', 'Bed 3', 'Bath ×2', 'Kitchen', 'Lounge'],
-      badge: 'Spacious',
-    ),
-  ];
+  List<Map<String, dynamic>> _plans = [];
+  String? _note;
 
   @override
   void initState() {
@@ -44,42 +32,104 @@ class _GeneratedFloorPlansScreenState extends State<GeneratedFloorPlansScreen> {
   }
 
   Future<void> _load() async {
-    final project = projectFromRoute(context);
-    try {
-      final rows = await ProjectService.getFloorPlans(project.id);
-      if (!mounted) return;
-      final selected = rows.cast<Map<String, dynamic>?>().firstWhere(
-            (r) => r?['is_selected'] == true,
-            orElse: () => null,
-          );
-      if (selected != null) {
-        final key = selected['option_key'] as String?;
-        final idx = _plans.indexWhere((p) => p.key == key);
-        if (idx >= 0) _selectedPlan = idx;
+    // Pick up the result cached by the room-requirements screen.
+    final result = PlannerService.peekResult();
+    if (result != null) {
+      final rows = result['floor_plans'] as List?;
+      if (rows != null && rows.isNotEmpty) {
+        _plans = List<Map<String, dynamic>>.from(rows);
+        _note = result['note'] as String?;
       }
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
+
+    // If we got nothing from the cache (e.g. screen was revisited), check
+    // Supabase for a previously saved selection.
+    if (_plans.isEmpty) {
+      final project = projectFromRoute(context);
+      try {
+        final rows = await ProjectService.getFloorPlans(project.id);
+        if (rows.isNotEmpty) {
+          _plans = rows;
+          final idx = rows.indexWhere((r) => r['is_selected'] == true);
+          if (idx >= 0) _selectedPlan = idx;
+        }
+      } catch (_) {}
+    }
+
+    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _continue() async {
+    if (_plans.isEmpty) return;
     final screen = stitchScreens[2];
     final project = projectFromRoute(context);
+    final plan = _plans[_selectedPlan];
+
     setState(() => _saving = true);
     try {
+      // Download all images from the API before they expire (6 hours).
+      // Use Future.wait to download them concurrently for speed.
+      final results = await Future.wait([
+        PlannerService.downloadAsBase64(plan['image_url'] as String),
+        PlannerService.downloadAsBase64(plan['front_elevation_url'] as String),
+        PlannerService.downloadAsBase64(plan['back_elevation_url'] as String),
+        PlannerService.downloadAsBase64(plan['left_elevation_url'] as String),
+        PlannerService.downloadAsBase64(plan['right_elevation_url'] as String),
+        PlannerService.downloadAsBase64(plan['foundation_plan_lb'] as String),
+        PlannerService.downloadAsBase64(plan['foundation_plan_rcc'] as String),
+        PlannerService.downloadAsBase64(plan['services_details_url'] as String),
+      ]);
+
+      final planImageB64 = results[0];
+      final frontElevB64 = results[1];
+      final backElevB64 = results[2];
+      final leftElevB64 = results[3];
+      final rightElevB64 = results[4];
+      final foundationLbB64 = results[5];
+      final foundationRccB64 = results[6];
+      final servicesB64 = results[7];
+
+      // Save all options with images to Supabase.
       await ProjectService.saveFloorPlanSelection(
         projectCodeOrId: project.id,
-        selectedOptionKey: _plans[_selectedPlan].key,
+        selectedOptionKey: plan['option_key'] as String,
         options: _plans
             .map(
               (p) => {
-                'option_key': p.key,
-                'title': p.name,
-                'description': '${p.area} | ${p.rooms.join(", ")}',
+                'option_key': p['option_key'],
+                'title': p['title'],
+                'description': p['description'],
+                // Only save full image data for the selected plan.
+                if (p['option_key'] == plan['option_key']) ...{
+                  'plan_image_base64': planImageB64,
+                  'front_elevation_base64': frontElevB64,
+                  'back_elevation_base64': backElevB64,
+                  'left_elevation_base64': leftElevB64,
+                  'right_elevation_base64': rightElevB64,
+                  'foundation_plan_lb_base64': foundationLbB64,
+                  'foundation_plan_rcc_base64': foundationRccB64,
+                  'services_details_base64': servicesB64,
+                  'area_sqft': p['area_sqft'],
+                  'rooms_json': p['rooms'],
+                  'warnings_json': p['warnings'],
+                },
               },
             )
             .toList(),
       );
+
+      // Also cache the selected plan's elevation URLs so the elevation screen
+      // can show them.
+      PlannerService.cacheResult({
+        'front_elevation_url': frontElevB64,
+        'back_elevation_url': backElevB64,
+        'left_elevation_url': leftElevB64,
+        'right_elevation_url': rightElevB64,
+        'foundation_plan_lb': foundationLbB64,
+        'foundation_plan_rcc': foundationRccB64,
+        'services_details_url': servicesB64,
+      });
+
       if (!mounted) return;
       await navigateStitchNext(context, screen);
     } catch (e) {
@@ -104,218 +154,180 @@ class _GeneratedFloorPlansScreenState extends State<GeneratedFloorPlansScreen> {
       screen: screen,
       moduleDescription:
           'AI-generated floor plans based on your plot size and room requirements.',
-      bottomLabel: _saving ? 'Saving…' : 'Continue to Elevation Design',
-      onBottomPressed: (_loading || _saving) ? null : _continue,
+      bottomLabel: _saving ? 'Saving plan…' : 'Continue to Elevation Design',
+      onBottomPressed: (_loading || _saving || _plans.isEmpty) ? null : _continue,
       body: _loading
           ? const Padding(
               padding: EdgeInsets.all(40),
               child: Center(child: CircularProgressIndicator()),
             )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Generated Floor Plans',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+          : _plans.isEmpty
+              ? Center(
+                  child: Text(
+                    'No plans generated yet. Go back and enter your plot and room details.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Select a floor plan to proceed with elevation design.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ...List.generate(_plans.length, (i) {
-                  final plan = _plans[i];
-                  final selected = _selectedPlan == i;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedPlan = i),
-                      child: FluentCard(
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Generated Floor Plans',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Select a floor plan to proceed with elevation design.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    if (_note != null && _note!.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      FluentCard(
+                        color: AppColors.primaryFixed.withValues(alpha: 0.12),
                         border: Border.all(
-                          color: selected
-                              ? AppColors.primary
-                              : AppColors.outlineVariant.withValues(alpha: 0.5),
-                          width: selected ? 2 : 1,
+                          color: AppColors.primary.withValues(alpha: 0.25),
                         ),
-                        color: selected
-                            ? AppColors.primaryFixed.withValues(alpha: 0.12)
-                            : null,
-                        child: Column(
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    plan.name,
-                                    style: theme.textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary
-                                        .withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    plan.badge,
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                if (selected) ...[
-                                  const SizedBox(width: 8),
-                                  const Icon(
-                                    Icons.check_circle,
-                                    color: AppColors.primary,
-                                    size: 22,
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            _FloorPlanPreview(rooms: plan.rooms),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.square_foot_outlined,
-                                  size: 16,
+                            const Icon(Icons.info_outline,
+                                color: AppColors.primary, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _note!,
+                                style: theme.textTheme.bodySmall?.copyWith(
                                   color: AppColors.onSurfaceVariant,
                                 ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  plan.area,
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    color: AppColors.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              children: plan.rooms.map((r) {
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surfaceContainer,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    r,
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  );
-                }),
-              ],
-            ),
+                    ],
+                    const SizedBox(height: 16),
+                    ...List.generate(_plans.length, (i) {
+                      final plan = _plans[i];
+                      final selected = _selectedPlan == i;
+                      final title = plan['title'] as String? ?? 'Plan ${i + 1}';
+                      final area = plan['area_sqft'];
+                      final imageUrl = plan['image_url'] as String?;
+                      final rooms =
+                          List<String>.from((plan['rooms'] as List?) ?? []);
+                      final warnings =
+                          List<String>.from((plan['warnings'] as List?) ?? []);
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: GestureDetector(
+                          onTap: () => setState(() => _selectedPlan = i),
+                          child: FluentCard(
+                            border: Border.all(
+                              color: selected
+                                  ? AppColors.primary
+                                  : AppColors.outlineVariant
+                                      .withValues(alpha: 0.5),
+                              width: selected ? 2 : 1,
+                            ),
+                            color: selected
+                                ? AppColors.primaryFixed
+                                    .withValues(alpha: 0.12)
+                                : null,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        title,
+                                        style: theme.textTheme.titleSmall
+                                            ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    if (selected)
+                                      const Icon(
+                                        Icons.check_circle,
+                                        color: AppColors.primary,
+                                        size: 22,
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                // The real floor plan image from the API.
+                                if (imageUrl != null)
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: ZoomableImage(
+                                      imageUrl: imageUrl,
+                                      fit: BoxFit.contain,
+                                      width: double.infinity,
+                                    ),
+                                  ),
+                                const SizedBox(height: 10),
+                                if (area != null)
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.square_foot_outlined,
+                                        size: 16,
+                                        color: AppColors.onSurfaceVariant,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '$area sq.ft covered',
+                                        style: theme.textTheme.labelMedium
+                                            ?.copyWith(
+                                          color: AppColors.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                if (rooms.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    children: rooms.map((r) {
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.surfaceContainer,
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          r,
+                                          style: theme.textTheme.labelSmall
+                                              ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
     );
   }
-}
-
-class _FloorPlanPreview extends StatelessWidget {
-  const _FloorPlanPreview({required this.rooms});
-
-  final List<String> rooms;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 120,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceLow,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppColors.outlineVariant.withValues(alpha: 0.4),
-        ),
-      ),
-      child: CustomPaint(
-        painter: _FloorPlanPainter(rooms.length),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Align(
-            alignment: Alignment.bottomRight,
-            child: Text(
-              '2D Preview',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: AppColors.outline,
-                  ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FloorPlanPainter extends CustomPainter {
-  _FloorPlanPainter(this.roomCount);
-
-  final int roomCount;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final wall = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.6)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    final fill = Paint()
-      ..color = AppColors.primaryFixed.withValues(alpha: 0.25)
-      ..style = PaintingStyle.fill;
-
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(8, 8, size.width - 16, size.height - 16),
-      const Radius.circular(4),
-    );
-    canvas.drawRRect(rect, fill);
-    canvas.drawRRect(rect, wall);
-
-    final cols = roomCount.clamp(2, 4);
-    final cellW = (size.width - 16) / cols;
-    for (var i = 1; i < cols; i++) {
-      canvas.drawLine(
-        Offset(8 + cellW * i, 8),
-        Offset(8 + cellW * i, size.height - 16),
-        wall,
-      );
-    }
-    canvas.drawLine(
-      Offset(8, size.height / 2),
-      Offset(size.width - 8, size.height / 2),
-      wall,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _FloorPlanPainter oldDelegate) =>
-      oldDelegate.roomCount != roomCount;
 }

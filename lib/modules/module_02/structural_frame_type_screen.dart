@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/planner_service.dart';
 import '../../shared/services/project_service.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
@@ -37,9 +38,19 @@ class _StructuralFrameTypeScreenState extends State<StructuralFrameTypeScreen> {
     ),
   ];
 
+  String? _rccBase64;
+  String? _lbBase64;
+
   @override
   void initState() {
     super.initState();
+    final cached = PlannerService.peekResult();
+    if (cached != null) {
+      final rcc = cached['foundation_plan_rcc'] as String?;
+      final lb = cached['foundation_plan_lb'] as String?;
+      if (rcc != null && rcc.startsWith('data:image/')) _rccBase64 = rcc;
+      if (lb != null && lb.startsWith('data:image/')) _lbBase64 = lb;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -59,7 +70,7 @@ class _StructuralFrameTypeScreenState extends State<StructuralFrameTypeScreen> {
   }
 
   Future<void> _save() async {
-    final screen = stitchScreens[7];
+    final screen = stitchScreens[6];
     final project = projectFromRoute(context);
     if (_frameType == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -90,14 +101,14 @@ class _StructuralFrameTypeScreenState extends State<StructuralFrameTypeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screen = stitchScreens[7];
+    final screen = stitchScreens[6];
     final theme = Theme.of(context);
 
     return StitchFlowScaffold(
       screen: screen,
       moduleDescription:
           'Choose the structural system for your building based on stories and budget.',
-      bottomLabel: _saving ? 'Saving…' : 'Confirm Structural Frame',
+      bottomLabel: _saving ? 'Saving…' : 'Generate Foundation Drawing',
       onBottomPressed: (_loading || _saving) ? null : _save,
       body: _loading
           ? const Padding(
@@ -124,6 +135,7 @@ class _StructuralFrameTypeScreenState extends State<StructuralFrameTypeScreen> {
           ...List.generate(_options.length, (i) {
             final opt = _options[i];
             final selected = _frameType == i;
+            final base64Image = i == 0 ? _rccBase64 : _lbBase64;
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: GestureDetector(
@@ -208,7 +220,7 @@ class _StructuralFrameTypeScreenState extends State<StructuralFrameTypeScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      _FrameDiagram(type: i),
+                      _FrameDiagram(type: i, base64Image: base64Image),
                       const SizedBox(height: 10),
                       Wrap(
                         spacing: 6,
@@ -256,12 +268,31 @@ class _StructuralFrameTypeScreenState extends State<StructuralFrameTypeScreen> {
 }
 
 class _FrameDiagram extends StatelessWidget {
-  const _FrameDiagram({required this.type});
+  const _FrameDiagram({required this.type, this.base64Image});
 
   final int type;
+  final String? base64Image;
 
   @override
   Widget build(BuildContext context) {
+    if (base64Image != null) {
+      return Container(
+        height: 120,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceLow,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(
+            Uri.parse(base64Image!).data!.contentAsBytes(),
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+          ),
+        ),
+      );
+    }
     return Container(
       height: 80,
       width: double.infinity,

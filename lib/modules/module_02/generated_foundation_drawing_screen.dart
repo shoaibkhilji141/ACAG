@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/constants/stitch_screens.dart';
+import '../../shared/services/planner_service.dart';
 import '../../shared/services/project_service.dart';
 import '../../shared/utils/project_route.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/stitch/stitch_flow_scaffold.dart';
+import '../../shared/widgets/zoomable_image.dart';
 import '../../theme/app_theme.dart';
 
 class GeneratedFoundationDrawingScreen extends StatefulWidget {
@@ -18,8 +20,46 @@ class GeneratedFoundationDrawingScreen extends StatefulWidget {
 class _GeneratedFoundationDrawingScreenState
     extends State<GeneratedFoundationDrawingScreen> {
   bool _saving = false;
+  String? _foundationUrl;
+  bool _loading = true;
+  Map<String, dynamic>? _cachedResult;
+  bool _isRcc = false;
 
-  static const _specs = [
+  @override
+  void initState() {
+    super.initState();
+    final cached = PlannerService.peekResult();
+    if (cached != null) {
+      _cachedResult = cached;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final project = projectFromRoute(context);
+    try {
+      final frameType = await ProjectService.getStructuralFrame(project.id);
+      if (!mounted) return;
+      
+      _isRcc = (frameType != null && (frameType['frame_type'] as String?)?.contains('RCC') == true);
+      if (_cachedResult != null) {
+        _foundationUrl = _isRcc
+            ? _cachedResult!['foundation_plan_rcc'] as String?
+            : _cachedResult!['foundation_plan_lb'] as String?;
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<(String, String)> get _specs => _isRcc ? [
+    ('Foundation Type', 'Isolated Footing + Plinth Beam'),
+    ('Depth Below NGL', '3.0 ft (Min)'),
+    ('Concrete Grade', 'M25 (1:1.5:3)'),
+    ('Steel Reinforcement', 'Fe-500, #4 Main Bars'),
+    ('Plinth Height', '1.0 ft above ground'),
+    ('Column Size', '9" x 9"'),
+  ] : [
     ('Foundation Type', 'Strip Footing + Plinth Beam'),
     ('Depth Below NGL', '1.8 m'),
     ('Concrete Grade', 'M25 (1:1:2)'),
@@ -29,7 +69,7 @@ class _GeneratedFoundationDrawingScreenState
   ];
 
   Future<void> _continue() async {
-    final screen = stitchScreens[6];
+    final screen = stitchScreens[7];
     final project = projectFromRoute(context);
     setState(() => _saving = true);
     try {
@@ -54,16 +94,21 @@ class _GeneratedFoundationDrawingScreenState
 
   @override
   Widget build(BuildContext context) {
-    final screen = stitchScreens[6];
+    final screen = stitchScreens[7];
     final theme = Theme.of(context);
 
     return StitchFlowScaffold(
       screen: screen,
       moduleDescription:
-          'Auto-generated foundation drawing based on soil analysis and story count.',
-      bottomLabel: _saving ? 'Saving…' : 'Continue to Frame Type',
-      onBottomPressed: _saving ? null : _continue,
-      body: Column(
+          'Auto-generated foundation drawing based on your chosen structural frame type.',
+      bottomLabel: _saving ? 'Saving…' : 'Continue to Material Estimation',
+      onBottomPressed: (_loading || _saving) ? null : _continue,
+      body: _loading
+          ? const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -96,10 +141,21 @@ class _GeneratedFoundationDrawingScreenState
                   ),
                   child: Stack(
                     children: [
-                      CustomPaint(
-                        size: const Size(double.infinity, 200),
-                        painter: _FoundationDrawingPainter(),
-                      ),
+                      if (_foundationUrl != null)
+                        Positioned.fill(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 20),
+                            child: ZoomableImage(
+                                      imageUrl: _foundationUrl!,
+                                      fit: BoxFit.contain,
+                                    ),
+                          ),
+                        )
+                      else
+                        CustomPaint(
+                          size: const Size(double.infinity, 200),
+                          painter: _FoundationDrawingPainter(),
+                        ),
                       Positioned(
                         top: 10,
                         right: 10,
