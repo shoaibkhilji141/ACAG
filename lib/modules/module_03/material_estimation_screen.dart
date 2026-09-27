@@ -28,12 +28,22 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
   double? _plotArea;
   int? _stories;
 
-  // Current market prices (PKR) — mid 2026 estimates.
   double _brickPrice = 19.0;       // per brick (Awwal)
   double _cementPrice = 1540.0;     // per 50kg bag
   double _steelPrice = 280.0;       // per kg (≈280,000/ton)
   double _sandPrice = 90.0;         // per cft (Ravi)
   double _crushPrice = 250.0;       // per cft (Sargodha)
+
+  // MEP & Finishing & Labor (per sqft approximations)
+  double _electrical = 0;
+  double _plumbing = 0;
+  double _paint = 0;
+  double _labor = 0;
+
+  double _electricalPrice = 65.0;   // per sqft
+  double _plumbingPrice = 80.0;     // per sqft
+  double _paintPrice = 50.0;        // per sqft
+  double _laborPrice = 450.0;       // per sqft
 
   @override
   void initState() {
@@ -99,6 +109,12 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
         (coveredArea * 4.0 * factor / 1000.0).toStringAsFixed(2));
     _sand = (coveredArea * 1.40 * factor).roundToDouble();
     _crush = (coveredArea * 1.00 * factor).roundToDouble();
+    
+    // MEP & Finishing & Labor (Quantity is simply the covered area)
+    _electrical = (coveredArea * factor).roundToDouble();
+    _plumbing = (coveredArea * factor).roundToDouble();
+    _paint = (coveredArea * factor).roundToDouble();
+    _labor = (coveredArea * factor).roundToDouble();
   }
 
   String _fmt(num n) {
@@ -126,7 +142,11 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
         (_cement * _cementPrice) +
         (_steel * 1000 * _steelPrice) + // _steel is in tons, price is per kg
         (_sand * _sandPrice) +
-        (_crush * _crushPrice);
+        (_crush * _crushPrice) +
+        (_electrical * _electricalPrice) +
+        (_plumbing * _plumbingPrice) +
+        (_paint * _paintPrice) +
+        (_labor * _laborPrice);
   }
 
   Future<void> _save() async {
@@ -278,6 +298,34 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
         qty: _fmt(_crush),
         cost: _crush * _crushPrice,
         rate: 'Rs ${_crushPrice.round()}/cft'
+      ),
+      (
+        name: 'Electrical (Wiring)',
+        unit: 'Sq.ft',
+        qty: _fmt(_electrical),
+        cost: _electrical * _electricalPrice,
+        rate: 'Rs ${_electricalPrice.round()}/sqft'
+      ),
+      (
+        name: 'Plumbing (Pipes)',
+        unit: 'Sq.ft',
+        qty: _fmt(_plumbing),
+        cost: _plumbing * _plumbingPrice,
+        rate: 'Rs ${_plumbingPrice.round()}/sqft'
+      ),
+      (
+        name: 'Paint & Finishes',
+        unit: 'Sq.ft',
+        qty: _fmt(_paint),
+        cost: _paint * _paintPrice,
+        rate: 'Rs ${_paintPrice.round()}/sqft'
+      ),
+      (
+        name: 'Labour (Grey Structure)',
+        unit: 'Sq.ft',
+        qty: _fmt(_labor),
+        cost: _labor * _laborPrice,
+        rate: 'Rs ${_laborPrice.round()}/sqft'
       ),
     ];
 
@@ -491,7 +539,7 @@ class _MaterialEstimationScreenState extends State<MaterialEstimationScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Grey structure materials only. Labour, finishing & transport not included.',
+                              'Includes grey structure, basic finishing, and labour. Transport not included.',
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: AppColors.onSurfaceVariant,
                                 fontSize: 10,
