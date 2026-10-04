@@ -245,21 +245,11 @@ class ProjectService {
       final projects = (rows as List)
           .map((r) => projectFromRow(Map<String, dynamic>.from(r as Map)))
           .toList();
-      if (projects.isNotEmpty) {
-        _ownerProjectsCache = projects;
-        for (final p in projects) {
-          fetchDetailsBundle(p.id, fallbackProject: p);
-        }
-        return projects;
+      _ownerProjectsCache = projects;
+      for (final p in projects) {
+        fetchDetailsBundle(p.id, fallbackProject: p);
       }
-
-      final demo = await _fetchProjectRow('ACAG-1');
-      if (demo != null) {
-        final project = projectFromRow(demo);
-        _ownerProjectsCache = [project];
-        fetchDetailsBundle(project.id, fallbackProject: project);
-        return [project];
-      }
+      return projects;
     } catch (e) {
       debugPrint('listOwnerProjects: $e');
     }

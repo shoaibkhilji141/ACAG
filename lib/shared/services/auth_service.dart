@@ -4,7 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/app_constants.dart';
 import '../utils/image_base64.dart';
+import '../utils/pakistan_input.dart';
 import 'notification_service.dart';
+import 'owner_service.dart';
+import 'project_service.dart';
 
 class AuthService {
   AuthService._();
@@ -27,6 +30,8 @@ class AuthService {
     }
 
     invalidateProfileCache();
+    ProjectService.invalidateProjectCache();
+    OwnerService.invalidateCaches();
 
     final profile = await client
         .from('profiles')
@@ -68,10 +73,57 @@ class AuthService {
     return role;
   }
 
+  static Future<void> signUpOwner({
+    required String fullName,
+    required String email,
+    required String password,
+    required String phone,
+    required String cnic,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    final normalizedPhone = PakistanInput.normalizePhone(phone);
+    final normalizedCnic = PakistanInput.normalizeCnic(cnic);
+
+    final response = await client.auth.signUp(
+      email: normalizedEmail,
+      password: password,
+      data: {
+        'role': 'owner',
+        'full_name': fullName.trim(),
+        'phone': normalizedPhone,
+        'cnic': normalizedCnic,
+      },
+    );
+
+    final user = response.user;
+    if (user == null) {
+      throw Exception('Could not create account. Please try again.');
+    }
+    if (user.identities == null || user.identities!.isEmpty) {
+      throw Exception('An account with this email already exists.');
+    }
+
+    if (response.session != null) {
+      try {
+        await client.from('profiles').update({
+          'full_name': fullName.trim(),
+          'phone': normalizedPhone,
+          'cnic': normalizedCnic,
+          'role': 'owner',
+        }).eq('id', user.id);
+      } catch (_) {
+        // Trigger already wrote the profile; login still works.
+      }
+      await client.auth.signOut();
+    }
+  }
+
   static Future<void> signOut() async {
     invalidateProfileCache();
     NotificationService.stopPolling();
     NotificationService.invalidateCache();
+    ProjectService.invalidateProjectCache();
+    OwnerService.invalidateCaches();
     await client.auth.signOut();
   }
 

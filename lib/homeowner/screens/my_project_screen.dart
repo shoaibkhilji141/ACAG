@@ -150,7 +150,7 @@ class _MyProjectScreenState extends State<MyProjectScreen> {
           : project == null
               ? const EmptyPlaceholder(
                   icon: Icons.home_work_outlined,
-                  message: 'No project is linked to this account.',
+                  message: 'Your Loan Approval is in process',
                 )
               : Column(
                   children: [

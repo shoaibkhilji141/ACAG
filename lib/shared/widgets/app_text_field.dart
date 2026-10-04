@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
 
@@ -18,6 +19,8 @@ class AppTextField extends StatefulWidget {
     this.onSubmitted,
     this.enabled = true,
     this.autofillHints,
+    this.maxLength,
+    this.inputFormatters,
   });
 
   final TextEditingController? controller;
@@ -32,6 +35,8 @@ class AppTextField extends StatefulWidget {
   final ValueChanged<String>? onSubmitted;
   final bool enabled;
   final Iterable<String>? autofillHints;
+  final int? maxLength;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   State<AppTextField> createState() => _AppTextFieldState();
@@ -81,9 +86,12 @@ class _AppTextFieldState extends State<AppTextField> {
           onFieldSubmitted: widget.onSubmitted,
           enabled: widget.enabled,
           autofillHints: widget.autofillHints,
+          maxLength: widget.maxLength,
+          inputFormatters: widget.inputFormatters,
           style: theme.textTheme.bodyMedium,
           decoration: InputDecoration(
             hintText: widget.hint,
+            counterText: widget.maxLength == null ? null : '',
             prefixIcon: widget.leadingIcon != null
                 ? Icon(widget.leadingIcon, color: AppColors.outline, size: 22)
                 : null,

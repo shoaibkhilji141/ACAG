@@ -10,10 +10,12 @@ class OwnerBottomNav extends StatelessWidget {
     super.key,
     required this.currentIndex,
     required this.onTap,
+    this.hasProject = true,
   });
 
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final bool hasProject;
 
   static const _items = [
     (
@@ -71,6 +73,7 @@ class OwnerBottomNav extends StatelessWidget {
                     activeIcon: _items[i].activeIcon,
                     label: _items[i].label,
                     selected: currentIndex == i,
+                    enabled: hasProject || i == 1 || i == 3,
                     onTap: () => onTap(i),
                     theme: theme,
                   ),
@@ -89,6 +92,7 @@ class _NavItem extends StatelessWidget {
     required this.activeIcon,
     required this.label,
     required this.selected,
+    required this.enabled,
     required this.onTap,
     required this.theme,
   });
@@ -97,15 +101,20 @@ class _NavItem extends StatelessWidget {
   final IconData activeIcon;
   final String label;
   final bool selected;
+  final bool enabled;
   final VoidCallback onTap;
   final ThemeData theme;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.primary : AppColors.secondary;
+    final color = !enabled
+        ? AppColors.outline.withValues(alpha: 0.45)
+        : selected
+            ? AppColors.primary
+            : AppColors.secondary;
 
     return InkWell(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

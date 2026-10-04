@@ -20,6 +20,7 @@ class OwnerShell extends StatefulWidget {
 
 class _OwnerShellState extends State<OwnerShell> {
   int _currentIndex = 0;
+  bool _hasProject = true;
 
   static const _screens = [
     OwnerDashboardScreen(),
@@ -35,14 +36,32 @@ class _OwnerShellState extends State<OwnerShell> {
     NotificationService.startPolling(
       interval: const Duration(seconds: 15),
     );
+    _resolveProjectAccess();
     // Prefetch project bundle / visits / reports / docs in background.
     ProjectService.prefetchOwnerHub().then((_) async {
       final project = await ProjectService.primaryOwnerProject();
+      if (!mounted) return;
+      _applyProjectAccess(project != null);
       if (project == null) return;
       await Future.wait([
         OwnerService.listDocuments(project.id),
         OwnerService.listComplaints(project.id),
       ]);
+    });
+  }
+
+  Future<void> _resolveProjectAccess() async {
+    final project = await ProjectService.primaryOwnerProject();
+    if (!mounted) return;
+    _applyProjectAccess(project != null);
+  }
+
+  void _applyProjectAccess(bool hasProject) {
+    setState(() {
+      _hasProject = hasProject;
+      if (!hasProject && (_currentIndex == 0 || _currentIndex == 2)) {
+        _currentIndex = 1;
+      }
     });
   }
 
@@ -62,7 +81,13 @@ class _OwnerShellState extends State<OwnerShell> {
       ),
       bottomNavigationBar: OwnerBottomNav(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        hasProject: _hasProject,
+        onTap: (index) {
+          final locked = !_hasProject && (index == 0 || index == 2);
+          if (locked) return;
+          setState(() => _currentIndex = index);
+          if (!_hasProject) _resolveProjectAccess();
+        },
       ),
     );
   }
